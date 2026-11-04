@@ -50,16 +50,36 @@ VERDICT_SCHEMA = {
     "required": ["verdict", "summary", "reason", "used_evidence"],
     "additionalProperties": False,
 }
+# 주장이 말하는 시점. start·end는 YYYY-MM-DD, 둘 다 빈 문자열이면 「현재」. label은 사람이 읽는 표현.
+TIME_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "label": {"type": "string"},
+        "start": {"type": "string"},
+        "end": {"type": "string"},
+    },
+    "required": ["label", "start", "end"],
+    "additionalProperties": False,
+}
 # 판정 전에 주장이 모호한지 보고, 모호하면 검증 가능한 문장 후보 3개를 받는다.
-# 후보 개수(3개)는 스키마로 강제하지 않고 화면에서 검사한다.
+# 원래 주장과 후보마다 주장 시점도 받는다. 후보 개수(3개)는 스키마로 강제하지 않고 화면에서 검사한다.
 CLARIFY_SCHEMA = {
     "type": "object",
     "properties": {
         "ambiguous": {"type": "boolean"},
         "reason": {"type": "string"},
-        "candidates": {"type": "array", "items": {"type": "string"}},
+        "time": TIME_SCHEMA,
+        "candidates": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"text": {"type": "string"}, "time": TIME_SCHEMA},
+                "required": ["text", "time"],
+                "additionalProperties": False,
+            },
+        },
     },
-    "required": ["ambiguous", "reason", "candidates"],
+    "required": ["ambiguous", "reason", "time", "candidates"],
     "additionalProperties": False,
 }
 MAX_BODY = 512 * 1024

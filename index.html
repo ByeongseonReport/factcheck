@@ -315,7 +315,7 @@ function renderEvidence(items, usedSet) {
 
     const date = document.createElement("div");
     date.className = "ev-date";
-    date.textContent = "날짜: " + (ev.date || "날짜 정보 없음");
+    date.textContent = "날짜: " + (ev.date || "날짜 정보 없음") + (ev.gapText && ev.date ? ` · ${ev.gapText}` : "");
     li.appendChild(date);
 
     const urlRow = document.createElement("div");
@@ -389,14 +389,28 @@ function formatDate(raw) {
 
 // ───── 1단계: Tavily 검색 ─────
 // 뉴스 검색: topic news라야 published_date가 온다. days 365는 사용자 지정(지정하지 않으면 최근 기사만 나온다, 2026-11-04 실측).
+// 과거 주장이면 newsWindow()가 days를 기간 지정으로 바꾼다.
 // 공공 출처 검색: topic general + include_domains. 날짜(published_date)는 오지 않는다.
 const SEARCHES = {
   news:   { topic: "news", days: 365, max_results: MAX_NEWS },
   public: { topic: "general", include_domains: PUBLIC_DOMAINS, max_results: MAX_PUBLIC },
 };
 
-async function searchTavily(claim, via) {
-  const opt = SEARCHES[via];
+// 주장 시점이 과거면 뉴스 검색 기간을 「최근 1년」 대신 주장 시점 앞뒤 1년으로 바꾼다(start_date·end_date, 2026-11-04 실측).
+function newsWindow(t) {
+  const today = parseDay(todayStr());
+  if (t.present || t.end >= today - 365 * DAY) return { days: 365 };
+  const iso = (ms) => new Date(ms).toISOString().slice(0, 10);
+  const shiftYear = (ms, n) => { const d = new Date(ms); d.setUTCFullYear(d.getUTCFullYear() + n); return d.getTime(); };
+  return { start_date: iso(shiftYear(t.start, -1)), end_date: iso(Math.min(shiftYear(t.end, 1), today)) };
+}
+
+async function searchTavily(claim, via, t) {
+  let opt = SEARCHES[via];
+  if (via === "news") {
+    const { days, ...rest } = opt;
+    opt = { ...rest, ...newsWindow(t) };
+  }
   let res;
   try {
     res = await fetch("/api/tavily", {
@@ -439,8 +453,8 @@ async function searchTavily(claim, via) {
 
 // 두 검색을 함께 돌려 합친다. 같은 주소는 한 번만 두고, 가중치가 높은 근거부터 번호를 매긴다.
 // 한쪽 검색만 실패하면 남은 쪽으로 계속하고 notes에 적는다. 둘 다 실패하면 뉴스 쪽 오류를 낸다.
-async function gatherEvidence(claim) {
-  const [news, pub] = await Promise.allSettled([searchTavily(claim, "news"), searchTavily(claim, "public")]);
+async function gatherEvidence(claim, t) {
+  const [news, pub] = await Promise.allSettled([searchTavily(claim, "news", t), searchTavily(claim, "public", t)]);
   if (news.status === "rejected" && pub.status === "rejected") throw news.reason;
   const notes = [];
   if (news.status === "rejected") notes.push("뉴스 검색 실패: " + news.reason.message);
@@ -457,10 +471,12 @@ async function gatherEvidence(claim) {
 }
 
 // ───── 2단계: Claude 판정 ─────
-function buildPrompt(claim, evidence) {
+function buildPrompt(claim, evidence, t) {
   const evText = evidence.map((ev, i) =>
-    `[근거 ${i + 1}]\n출처 등급: ${ev.source.label} (가중치 ${ev.source.weight.toFixed(2)})\n제목: ${ev.title || "(없음)"}\n날짜: ${ev.date || "(없음)"}\n주소: ${ev.url || "(없음)"}\n내용: ${ev.content || "(없음)"}`
+    `[근거 ${i + 1}]\n출처 등급: ${ev.source.label} (가중치 ${ev.source.weight.toFixed(2)})\n제목: ${ev.title || "(없음)"}\n날짜: ${ev.date || "(없음)"} (${ev.gapText})\n주소: ${ev.url || "(없음)"}\n내용: ${ev.content || "(없음)"}`
   ).join("\n\n");
+  const iso = (ms) => new Date(ms).toISOString().slice(0, 10);
+  const timeLine = t.present ? `현재 (오늘 ${todayStr()})` : `${t.label} (${iso(t.start)} ~ ${iso(t.end)})`;
 
   return `너는 지역 언론사의 팩트체크 담당 기자다. 아래 [주장]을 아래 [근거]만 보고 판정한다.
 
@@ -482,6 +498,11 @@ function buildPrompt(claim, evidence) {
 9. 가중치 0.3 이하(위키·블로그 등)의 근거만으로는 판정하지 않는다. 그런 근거만 관련 있으면 "판단 유보"로 판정한다.
 10. 정부·공공기관 근거는 그 기관이 직접 한 사업을 자기 평가한 내용일 수 있다. 사업 성과나 효과에 관한 주장이라면 그 점을 reason에 밝힌다.
 11. 날짜가 "(없음)"인 근거는 언제 자료인지 내용에서 확인되지 않으면 시점이 중요한 주장에 쓰지 않는다.
+
+[시점] 이 주장이 말하는 시점은 ${timeLine}이다. 근거마다 날짜 옆에 주장 시점과의 차이를 붙였다.
+12. 근거의 날짜(게시일)와 근거가 다루는 자료의 기준 시점은 다를 수 있다. 본문에 「○월 말 기준」 같은 표현이 있으면 그 기준 시점을 우선해서 본다.
+13. 시점이 다른 근거끼리 어긋나면 주장 시점에 가까운 근거를 우선한다. 주장 시점이 같거나 비슷한 근거끼리 어긋나면 출처 가중치가 높은 근거를 우선한다.
+14. 주장 시점이 현재라면 오래된 근거는 지금도 유효한지 확인되지 않는다는 점을 감안한다. 주장 시점이 과거라면 그 뒤에 나온 근거라도 그 시점의 사실을 다루면 쓸 수 있다.
 
 [주장]
 ${claim}
@@ -538,25 +559,71 @@ function buildClarifyPrompt(claim) {
 
 reason에는 무엇이 모호한지 한두 문장으로 쓴다. 모호하지 않으면 한 문장으로 그렇게 쓴다.
 
+[주장 시점] time에는 원래 주장이, 각 후보의 time에는 그 후보 문장이 말하는 시점을 넣는다. 오늘 날짜는 ${todayStr()}이다.
+- 주장이 사실이어야 하는 기간을 start·end에 YYYY-MM-DD로 넣는다. 「2026년」이면 2026-01-01~2026-12-31, 「2015년 6월」이면 2015-06-01~2015-06-30.
+- 「작년」「올해」「지난달」 같은 말은 오늘 날짜를 기준으로 실제 날짜로 바꾼다.
+- 시점이 없거나 「현재」「요즘」「현직」처럼 지금 상태를 말하면 start와 end를 빈 문자열로 둔다.
+- label에는 「현재」「2026년」「2015년 6월」처럼 짧게 쓴다.
+- 「2026년에 넘었다」처럼 그 기간 안에 일어난 일을 말하면 그 기간을 넣는다. 추측으로 기간을 좁히지 않는다.
+
 [주장]
 ${claim}`;
+}
+
+// ───── 주장 시점 ─────
+const DAY = 86400000;
+function todayStr() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+function parseDay(s) {
+  if (typeof s !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const t = Date.parse(s + "T00:00:00Z");
+  return isNaN(t) ? null : t;
+}
+// 모델이 준 시점을 검사한다. 읽을 수 없으면 「현재」로 본다. 결과: { label, start, end(ms, 포함), present, note }
+function normalizeTime(raw) {
+  const today = parseDay(todayStr());
+  const r = raw && typeof raw === "object" ? raw : {};
+  const s = parseDay(r.start), e = parseDay(r.end);
+  if (!r.start && !r.end) return { label: "현재", start: today, end: today, present: true, note: "" };
+  if (s === null || e === null || s > e) {
+    return { label: "현재", start: today, end: today, present: true,
+             note: `주장 시점(${r.start || "?"}~${r.end || "?"})을 읽지 못해 현재로 봤습니다.` };
+  }
+  return { label: (r.label || "").trim() || `${r.start}~${r.end}`, start: s, end: e, present: false, note: "" };
+}
+// 근거 날짜와 주장 시점의 차이. days: 0이면 기간 안, 양수면 기간 밖으로 떨어진 일수. 날짜가 없으면 null.
+function timeGap(evDate, t) {
+  const d = parseDay(evDate);
+  if (d === null) return null;
+  const days = d < t.start ? Math.round((t.start - d) / DAY) : d > t.end ? Math.round((d - t.end) / DAY) : 0;
+  return { days, before: d < t.start };
+}
+function gapText(gap, t) {
+  if (!gap) return "날짜 미상";
+  if (gap.days === 0) return t.present ? "오늘 자료" : "주장 시점 안";
+  const amount = gap.days < 45 ? `${gap.days}일` : gap.days < 730 ? `${Math.round(gap.days / 30.4)}개월` : `${(gap.days / 365).toFixed(1)}년`;
+  if (t.present) return `${amount} 전 자료`;
+  return `주장 시점보다 ${amount} ${gap.before ? "앞" : "뒤"}`;
 }
 
 function showClarifyChoices(claim, info, clarifyData) {
   $("clarifyReason").textContent = info.reason || "";
   const box = $("clarifyChoices");
   box.replaceChildren();
-  info.candidates.forEach((text, i) => {
+  info.candidates.forEach((c, i) => {
     const b = document.createElement("button");
     b.type = "button";
     const num = document.createElement("span");
     num.className = "num";
     num.textContent = `${i + 1}`;
-    b.append(num, text);
-    b.addEventListener("click", () => verifyClaim(text, { original: claim, clarifyData }));
+    b.append(num, c.text);
+    b.addEventListener("click", () => verifyClaim(c.text, { original: claim, clarifyData, time: c.time }));
     box.appendChild(b);
   });
-  $("clarifyKeep").onclick = () => verifyClaim(claim, { original: claim, clarifyData, kept: true });
+  $("clarifyKeep").onclick = () => verifyClaim(claim, { original: claim, clarifyData, kept: true, time: clarifyData.time });
   $("clarifyMeta").textContent = usageText(clarifyData, "문장 정리");
   $("clarify").classList.remove("hidden");
 }
@@ -620,7 +687,8 @@ async function runCheck() {
   try {
     const clarifyData = await callClaude("/api/clarify", buildClarifyPrompt(claim), "문장 정리");
     const candidates = (Array.isArray(clarifyData.candidates) ? clarifyData.candidates : [])
-      .filter((c) => typeof c === "string" && c.trim()).map((c) => c.trim()).slice(0, 3);
+      .filter((c) => c && typeof c.text === "string" && c.text.trim())
+      .map((c) => ({ text: c.text.trim(), time: c.time })).slice(0, 3);
     setProgress("");
     if (clarifyData.ambiguous === true && candidates.length >= 2) {
       showClarifyChoices(claim, { reason: clarifyData.reason, candidates }, clarifyData);
@@ -629,7 +697,7 @@ async function runCheck() {
     const note = clarifyData.ambiguous === true
       ? "모호하다는 판단이 나왔지만 후보가 부족해 원래 문장으로 검증했습니다." : "";
     btn.disabled = false;
-    await verifyClaim(claim, { clarifyData, note });
+    await verifyClaim(claim, { clarifyData, note, time: clarifyData.time });
   } catch (e) {
     setProgress("");
     showError("오류: " + (e && e.message ? e.message : String(e)));
@@ -659,8 +727,11 @@ async function verifyClaim(claim, opts = {}) {
   }
 
   try {
+    const t = normalizeTime(opts.time);
     setProgress("Tavily로 근거를 찾는 중… (뉴스 + 정부·통계·공공기관)");
-    const { evidence, notes: searchNotes } = await gatherEvidence(claim);
+    const { evidence, notes: searchNotes } = await gatherEvidence(claim, t);
+    if (t.note) searchNotes.unshift(t.note);
+    evidence.forEach((ev) => { ev.gapText = gapText(timeGap(ev.date, t), t); });
 
     if (evidence.length === 0) {
       setProgress("");
@@ -674,13 +745,16 @@ async function verifyClaim(claim, opts = {}) {
     }
 
     renderEvidence(evidence, new Set());
-    const data = await callClaude("/api/claude", buildPrompt(claim, evidence), "판정");
+    const data = await callClaude("/api/claude", buildPrompt(claim, evidence, t), "판정");
     const v = parseVerdict(data, evidence);
     setProgress("");
 
     const tierCount = {};
     evidence.forEach((ev) => { tierCount[ev.source.label] = (tierCount[ev.source.label] || 0) + 1; });
-    const metaParts = [`근거 ${evidence.length}건 (${Object.entries(tierCount).map(([l, c]) => `${l} ${c}`).join(", ")})`,
+    const win = newsWindow(t);
+    const metaParts = [`주장 시점: ${t.present ? "현재" : t.label}`,
+                       `뉴스 검색 기간: ${win.days ? "최근 1년" : `${win.start_date} ~ ${win.end_date}`}`,
+                       `근거 ${evidence.length}건 (${Object.entries(tierCount).map(([l, c]) => `${l} ${c}`).join(", ")})`,
                        `판정 모델: ${data.model || "알 수 없음"}`];
     if (v.used.length) {
       metaParts.push(`사용한 근거: ${v.used.map((n) => "[" + n + "]").join(" ")}`);
