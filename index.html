@@ -1,0 +1,607 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>팩트체크 도구</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --text: #1b1f24;
+    --muted: #5b6573;
+    --line: #d9dee5;
+    --accent: #1f4fa3;
+    --error: #c62828;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Pretendard", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+    font-size: 19px;
+    line-height: 1.6;
+  }
+  main { max-width: 860px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 30px; margin: 8px 0 20px; }
+  h2 { font-size: 22px; margin: 0 0 12px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  label { display: block; font-weight: 700; margin: 12px 0 6px; }
+  input, textarea, select {
+    width: 100%;
+    font: inherit;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--text);
+  }
+  textarea { min-height: 110px; resize: vertical; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+  button {
+    font: inherit;
+    font-weight: 700;
+    padding: 12px 22px;
+    border-radius: 8px;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+  }
+  button.secondary { background: #fff; color: var(--accent); }
+  button:disabled { opacity: 0.5; cursor: wait; }
+  #checkBtn { width: 100%; font-size: 22px; padding: 16px; margin-top: 14px; }
+  .note { color: var(--muted); font-size: 16px; margin: 10px 0 0; }
+  #keyStatus { font-size: 16px; color: var(--muted); margin-top: 10px; min-height: 1.6em; }
+  #error {
+    color: var(--error);
+    font-weight: 700;
+    white-space: pre-wrap;
+    margin: 0 0 20px;
+  }
+  #error:empty { display: none; }
+  #progress { color: var(--muted); margin: 0 0 20px; }
+  #progress:empty { display: none; }
+  .badge {
+    display: inline-block;
+    font-size: 34px;
+    font-weight: 800;
+    padding: 10px 26px;
+    border-radius: 999px;
+    color: #fff;
+    margin-bottom: 14px;
+  }
+  .v-true       { background: #1b7f3b; }
+  .v-mostly     { background: #5a9e2f; }
+  .v-half       { background: #d08a00; }
+  .v-mostlyfalse{ background: #d4561c; }
+  .v-false      { background: #b3261e; }
+  .v-hold       { background: #6b7280; }
+  .summary { font-size: 22px; font-weight: 700; margin: 4px 0 12px; }
+  .reason { white-space: pre-wrap; margin: 0 0 8px; }
+  .meta { color: var(--muted); font-size: 15px; margin-top: 10px; }
+  ol.evidence { padding-left: 0; list-style: none; margin: 0; }
+  ol.evidence li {
+    border-top: 1px solid var(--line);
+    padding: 14px 0;
+  }
+  ol.evidence li:first-child { border-top: none; padding-top: 0; }
+  .ev-title { font-weight: 700; }
+  .ev-used {
+    display: inline-block;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    padding: 0 8px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .ev-date { color: var(--muted); font-size: 16px; }
+  .ev-url { font-size: 16px; word-break: break-all; }
+  .ev-url a { color: var(--accent); }
+  .ev-content { white-space: pre-wrap; font-size: 17px; margin-top: 6px; color: #333a44; }
+  .hidden { display: none; }
+  .choices { display: flex; flex-direction: column; gap: 10px; margin: 12px 0 14px; }
+  .choices button {
+    text-align: left;
+    background: #fff;
+    color: var(--text);
+    border: 2px solid var(--accent);
+    font-weight: 600;
+    line-height: 1.5;
+  }
+  .choices button:hover { background: #eef3fb; }
+  .choices .num { color: var(--accent); font-weight: 800; margin-right: 8px; }
+  .checked-claim { font-size: 17px; margin: 0 0 10px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>팩트체크 도구</h1>
+
+  <section class="card" aria-labelledby="claimHead">
+    <h2 id="claimHead">검증할 주장</h2>
+    <label for="claim" class="hidden">주장</label>
+    <textarea id="claim" placeholder="예: 원주시 인구는 2025년에 36만 명을 넘었다."></textarea>
+    <label for="modelSelect">판정 모델</label>
+    <select id="modelSelect">
+      <option value="claude-sonnet-5-5">Sonnet 5.5 — 기본, 균형</option>
+    </select>
+    <button id="checkBtn" type="button">검증하기</button>
+  </section>
+
+  <div id="progress" role="status"></div>
+  <div id="error" role="alert"></div>
+
+  <section id="clarify" class="card hidden" aria-labelledby="clarifyHead">
+    <h2 id="clarifyHead">문장이 모호합니다</h2>
+    <p id="clarifyReason" class="reason"></p>
+    <p class="note">가장 가까운 뜻을 고르면 그 문장으로 검증합니다. 후보에 「해당 시」「특정 공장」처럼 대상이 비어 있으면, 위 주장 칸에 대상을 직접 넣어 고친 뒤 다시 검증하는 편이 정확합니다.</p>
+    <div id="clarifyChoices" class="choices"></div>
+    <button id="clarifyKeep" type="button" class="secondary">원래 문장 그대로 검증</button>
+    <p id="clarifyMeta" class="meta"></p>
+  </section>
+
+  <section id="result" class="card hidden" aria-labelledby="resultHead">
+    <h2 id="resultHead">판정</h2>
+    <p id="checkedClaim" class="checked-claim hidden"></p>
+    <div id="badge" class="badge"></div>
+    <p id="summary" class="summary"></p>
+    <p id="reason" class="reason"></p>
+    <p id="meta" class="meta"></p>
+  </section>
+
+  <section id="evidenceBox" class="card hidden" aria-labelledby="evHead">
+    <h2 id="evHead">근거</h2>
+    <ol id="evidence" class="evidence"></ol>
+  </section>
+</main>
+
+<script>
+"use strict";
+
+// ───── 설정 ─────
+// 키는 server.py가 .env에서 읽어 붙인다. 이 화면은 키를 모른다.
+const MAX_EVIDENCE = 5;
+
+const VERDICTS = ["사실", "대체로 사실", "절반의 사실", "대체로 사실 아님", "사실 아님", "판단 유보"];
+const HOLD = "판단 유보";
+const VERDICT_CLASS = {
+  "사실": "v-true",
+  "대체로 사실": "v-mostly",
+  "절반의 사실": "v-half",
+  "대체로 사실 아님": "v-mostlyfalse",
+  "사실 아님": "v-false",
+  "판단 유보": "v-hold",
+};
+
+const $ = (id) => document.getElementById(id);
+
+const OPENED_AS_FILE = location.protocol !== "http:" && location.protocol !== "https:";
+const FILE_WARNING = "이 파일 대신 같은 폴더의 「팩트체크 열기.bat」를 더블클릭해서 여세요. 그래야 .env의 키로 검색과 판정을 할 수 있습니다.";
+
+// ───── 화면 도우미 ─────
+function showError(msg) { $("error").textContent = msg; }
+function clearError() { $("error").textContent = ""; }
+function setProgress(msg) { $("progress").textContent = msg || ""; }
+
+function resetResult() {
+  $("result").classList.add("hidden");
+  $("evidenceBox").classList.add("hidden");
+  $("evidence").replaceChildren();
+  $("clarify").classList.add("hidden");
+  $("clarifyChoices").replaceChildren();
+  $("checkedClaim").classList.add("hidden");
+}
+
+function safeHttpUrl(raw) {
+  try {
+    const u = new URL(String(raw));
+    return (u.protocol === "http:" || u.protocol === "https:") ? u.href : null;
+  } catch (e) { return null; }
+}
+
+function renderEvidence(items, usedSet) {
+  const list = $("evidence");
+  list.replaceChildren();
+  items.forEach((ev, i) => {
+    const n = i + 1;
+    const li = document.createElement("li");
+
+    const title = document.createElement("div");
+    title.className = "ev-title";
+    title.textContent = `[${n}] ${ev.title || "(제목 없음)"}`;
+    if (usedSet.has(n)) {
+      const tag = document.createElement("span");
+      tag.className = "ev-used";
+      tag.textContent = "판정에 사용";
+      title.appendChild(tag);
+    }
+    li.appendChild(title);
+
+    const date = document.createElement("div");
+    date.className = "ev-date";
+    date.textContent = "날짜: " + (ev.date || "날짜 정보 없음");
+    li.appendChild(date);
+
+    const urlRow = document.createElement("div");
+    urlRow.className = "ev-url";
+    const href = safeHttpUrl(ev.url);
+    if (href) {
+      const a = document.createElement("a");
+      a.href = href;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.textContent = href;
+      urlRow.append("출처: ", a);
+    } else {
+      urlRow.textContent = "출처: " + (ev.url ? String(ev.url) + " (열 수 없는 주소)" : "주소 없음");
+    }
+    li.appendChild(urlRow);
+
+    const content = document.createElement("div");
+    content.className = "ev-content";
+    content.textContent = ev.content || "";
+    li.appendChild(content);
+
+    list.appendChild(li);
+  });
+  $("evidenceBox").classList.toggle("hidden", items.length === 0);
+}
+
+function renderVerdict(v) {
+  const badge = $("badge");
+  badge.className = "badge " + (VERDICT_CLASS[v.verdict] || "v-hold");
+  badge.textContent = v.verdict;
+  $("summary").textContent = v.summary || "";
+  $("reason").textContent = v.reason || "";
+  $("meta").textContent = v.meta || "";
+  $("result").classList.remove("hidden");
+}
+
+// ───── HTTP 오류 ─────
+// local=true면 server.py가 만든 오류(키 없음 등), false면 Tavily가 돌려준 오류다.
+class HttpError extends Error {
+  constructor(service, status, detail, local) {
+    super(`${local ? "로컬 서버" : service} 오류 (HTTP ${status})${detail ? ": " + detail : ""}`);
+    this.status = status;
+    this.local = !!local;
+  }
+}
+
+async function readError(res) {
+  try {
+    const text = await res.text();
+    try {
+      const j = JSON.parse(text);
+      const msg = (j.error && (j.error.message || j.error)) || j.detail?.error || j.detail || j.message || text.slice(0, 300);
+      return { msg: typeof msg === "string" ? msg : JSON.stringify(msg), local: j.source === "local" };
+    } catch (e) { return { msg: text.slice(0, 300), local: false }; }
+  } catch (e) { return { msg: "", local: false }; }
+}
+
+function serverDownError(e) {
+  return new Error(`팩트체크 도구가 꺼져 있습니다. 검은 창이 닫혔다면 「팩트체크 열기.bat」를 다시 더블클릭하세요. (${e.message})`);
+}
+
+// "Sat, 31 Oct 2026 07:00:00 GMT" → "2026-10-31". 읽지 못하면 받은 글자 그대로.
+function formatDate(raw) {
+  if (typeof raw !== "string" || !raw.trim()) return "";
+  const d = new Date(raw);
+  if (isNaN(d)) return raw.trim();
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}`;
+}
+
+// ───── 1단계: Tavily 검색 ─────
+async function searchTavily(claim) {
+  let res;
+  try {
+    res = await fetch("/api/tavily", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: claim,
+        topic: "news",       // 뉴스 모드라야 published_date가 온다
+        days: 365,           // 최근 1년. 지정하지 않으면 최근 기사만 나온다(2026-11-04 실측)
+        search_depth: "advanced",
+        max_results: MAX_EVIDENCE,
+        include_answer: false,
+        include_raw_content: false,
+        include_images: false,
+      }),
+    });
+  } catch (e) { throw serverDownError(e); }
+
+  if (!res.ok) {
+    const { msg, local } = await readError(res);
+    const hint = local ? "" :
+                 res.status === 401 ? "\n.env의 TAVILY_API_KEY가 틀렸거나 만료됐습니다." :
+                 res.status === 429 ? "\nTavily 사용 한도를 넘었습니다." :
+                 res.status === 432 || res.status === 433 ? "\nTavily 요금제 한도를 넘었습니다." : "";
+    throw new HttpError("Tavily", res.status, msg + hint, local);
+  }
+
+  let data;
+  try { data = await res.json(); } catch (e) { throw new Error("Tavily 응답을 읽지 못했습니다(JSON 아님)."); }
+  const results = Array.isArray(data.results) ? data.results : [];
+  return results.slice(0, MAX_EVIDENCE).map((r) => ({
+    title: typeof r.title === "string" ? r.title.trim() : "",
+    url: typeof r.url === "string" ? r.url.trim() : "",
+    date: formatDate(r.published_date),
+    content: typeof r.content === "string" ? r.content.trim() : "",
+  }));
+}
+
+// ───── 2단계: Claude 판정 ─────
+function buildPrompt(claim, evidence) {
+  const evText = evidence.map((ev, i) =>
+    `[근거 ${i + 1}]\n제목: ${ev.title || "(없음)"}\n날짜: ${ev.date || "(없음)"}\n주소: ${ev.url || "(없음)"}\n내용: ${ev.content || "(없음)"}`
+  ).join("\n\n");
+
+  return `너는 지역 언론사의 팩트체크 담당 기자다. 아래 [주장]을 아래 [근거]만 보고 판정한다.
+
+[판정 단계] 다음 여섯 개 중 정확히 하나만 고른다.
+사실 / 대체로 사실 / 절반의 사실 / 대체로 사실 아님 / 사실 아님 / 판단 유보
+
+[반드시 지킬 규칙]
+1. 오직 아래 [근거]에 적힌 내용만 사용한다. 너의 사전 지식, 추측, 근거에 없는 사실을 판정이나 이유에 쓰지 않는다.
+2. 주장 속 사람 이름, 기관, 지역, 날짜가 근거와 정확히 맞을 때만 그 근거를 사용한다. 이름이 일부만 같거나, 다른 지역·다른 기관·다른 시점의 이야기라면 관련 없는 근거로 보고 쓰지 않는다.
+3. 주장과 직접 관련된 근거가 하나도 없으면 반드시 "판단 유보"로 판정하고 used_evidence는 빈 배열로 둔다.
+4. 근거끼리 서로 어긋나 판단할 수 없거나, 근거가 주장의 핵심을 확인하기에 부족하면 "판단 유보"로 판정한다.
+5. reason의 각 문장 끝에 그 문장의 바탕이 된 근거 번호를 [1], [2]처럼 붙인다. 판단 유보라면 왜 근거가 부족하거나 관련 없는지 설명한다.
+6. used_evidence에는 판정에 실제로 쓴 근거 번호만 정수로 넣는다.
+7. summary는 한국어 한 문장, reason은 한국어로 3~6문장으로 쓴다.
+
+[주장]
+${claim}
+
+[근거]
+${evText}`;
+}
+
+// 판정은 server.py가 Claude API(claude-opus-5-5)로 받는다. 답 형식(JSON 스키마)도 서버가 강제한다.
+// 429·5xx·연결 오류 재시도는 서버의 Anthropic SDK가 2번까지 알아서 한다.
+// path: /api/claude(판정) 또는 /api/clarify(문장 정리). what은 진행·오류 문구에 쓰는 작업 이름.
+async function callClaude(path, prompt, what) {
+  setProgress(`Claude에게 ${what}을(를) 묻는 중…`);
+  let res;
+  try {
+    res = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt, model: $("modelSelect").value }),
+    });
+  } catch (e) { throw serverDownError(e); }
+
+  if (!res.ok) {
+    const { msg } = await readError(res);
+    throw new Error(`Claude ${what} 실패 (HTTP ${res.status}): ${msg}`);
+  }
+  try { return await res.json(); }
+  catch (e) { throw new Error(`Claude ${what} 결과를 읽지 못했습니다(JSON 아님).`); }
+}
+
+// ───── 0단계: 모호한 문장 걸러 내기 ─────
+function buildClarifyPrompt(claim) {
+  return `너는 지역 언론사 팩트체크 데스크다. 아래 [주장]을 지금 문장 그대로 사실 여부를 검증할 수 있는지 판단한다.
+
+[모호하다고 볼 때] 다음 중 하나라도 있어서, 어떻게 읽느냐에 따라 검증 결과가 달라질 때만 모호하다고 본다.
+- 누가·무엇이 주체인지 불분명하다(지시어 「그」「이번」, 생략된 주어 등).
+- 어느 지역·기관·사람인지 둘 이상으로 읽힌다.
+- 시점이 없고, 시점에 따라 참·거짓이 달라진다.
+- 「많이」「크게」「역대급」처럼 기준 없는 정도 표현이 핵심이다.
+- 무엇과 비교하는지 빠져 있다.
+- 한 문장에 서로 다른 주장이 둘 이상 섞여 있다.
+
+[모호하지 않을 때] 위에 해당하지 않으면 ambiguous를 false로, candidates를 빈 배열로 둔다.
+- 사소한 표현 차이로 모호하다고 하지 않는다.
+- 통계 집계 기준(주민등록인구·총인구 등), 정확한 기준일, 단위 같은 세부 정의 차이는 모호함으로 보지 않는다. 그런 차이는 판정 단계에서 근거를 보고 다룬다.
+- 기자가 보통 읽는 뜻이 하나로 정해지면 모호하지 않다. 어느 쪽으로 읽어도 결론이 같을 것 같으면 모호하지 않다.
+
+[후보를 만들 때] ambiguous가 true이면 candidates에 정확히 3개를 넣는다.
+- 각 후보는 그것만 읽어도 검증할 수 있는 한국어 한 문장이다.
+- 세 후보는 서로 다른 해석이어야 한다. 가장 그럴듯한 해석을 먼저 둔다.
+- 빠진 주체·지역·시점·비교 대상을 채워 해석을 분명히 하되, 원래 주장의 핵심 내용과 수치는 바꾸지 않는다.
+- 원래 주장에 없는 구체적 수치·비율·기준값(예: 「10% 이상」)을 새로 만들어 넣지 않는다. 「크게」 같은 표현은 그대로 두고 무엇과 비교하는지만 분명히 한다.
+- 참·거짓을 미리 판단해서 후보를 고르지 않는다. 검색해 본 사실을 끼워 넣지 않는다.
+
+reason에는 무엇이 모호한지 한두 문장으로 쓴다. 모호하지 않으면 한 문장으로 그렇게 쓴다.
+
+[주장]
+${claim}`;
+}
+
+function showClarifyChoices(claim, info, clarifyData) {
+  $("clarifyReason").textContent = info.reason || "";
+  const box = $("clarifyChoices");
+  box.replaceChildren();
+  info.candidates.forEach((text, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    const num = document.createElement("span");
+    num.className = "num";
+    num.textContent = `${i + 1}`;
+    b.append(num, text);
+    b.addEventListener("click", () => verifyClaim(text, { original: claim, clarifyData }));
+    box.appendChild(b);
+  });
+  $("clarifyKeep").onclick = () => verifyClaim(claim, { original: claim, clarifyData, kept: true });
+  $("clarifyMeta").textContent = usageText(clarifyData, "문장 정리");
+  $("clarify").classList.remove("hidden");
+}
+
+function usageText(data, what) {
+  const u = data && data.usage;
+  if (!u || !Number.isFinite(u.input_tokens)) return "";
+  return `${what} 토큰: 입력 ${u.input_tokens.toLocaleString()} / 출력 ${u.output_tokens.toLocaleString()}` +
+    (Number.isFinite(u.cost_usd) ? ` (약 $${u.cost_usd.toFixed(4)})` : "");
+}
+
+// ───── 3단계: 답 검사 ─────
+function parseVerdict(obj, evidenceCount) {
+  if (!obj || typeof obj !== "object") throw new Error("Claude 판정 결과가 비어 있습니다.");
+  const notes = [];
+  let verdict = typeof obj.verdict === "string" ? obj.verdict.trim() : "";
+  if (!VERDICTS.includes(verdict)) {
+    notes.push(`모델이 6단계 밖의 판정("${verdict || "빈 값"}")을 보내서 판단 유보로 바꿨습니다.`);
+    verdict = HOLD;
+  }
+
+  const rawUsed = Array.isArray(obj.used_evidence) ? obj.used_evidence : [];
+  const used = [...new Set(rawUsed.map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= evidenceCount))].sort((a, b) => a - b);
+  if (used.length !== rawUsed.length) notes.push("범위를 벗어나거나 중복된 근거 번호를 뺐습니다.");
+
+  if (verdict !== HOLD && used.length === 0) {
+    notes.push(`모델이 "${verdict}"로 판정했지만 사용한 근거 번호가 없어서 판단 유보로 바꿨습니다.`);
+    verdict = HOLD;
+  }
+
+  return {
+    verdict,
+    summary: typeof obj.summary === "string" ? obj.summary.trim() : "",
+    reason: typeof obj.reason === "string" ? obj.reason.trim() : "",
+    used: verdict === HOLD && used.length === 0 ? [] : used,
+    notes,
+  };
+}
+
+// ───── 검증하기 ─────
+async function runCheck() {
+  clearError();
+  resetResult();
+  setProgress("");
+
+  if (OPENED_AS_FILE) { showError(FILE_WARNING); return; }
+  const claim = $("claim").value.trim();
+  if (!claim) { showError("검증할 주장을 입력하세요."); return; }
+
+  const btn = $("checkBtn");
+  btn.disabled = true;
+  try {
+    const clarifyData = await callClaude("/api/clarify", buildClarifyPrompt(claim), "문장 정리");
+    const candidates = (Array.isArray(clarifyData.candidates) ? clarifyData.candidates : [])
+      .filter((c) => typeof c === "string" && c.trim()).map((c) => c.trim()).slice(0, 3);
+    setProgress("");
+    if (clarifyData.ambiguous === true && candidates.length >= 2) {
+      showClarifyChoices(claim, { reason: clarifyData.reason, candidates }, clarifyData);
+      return; // 사용자가 후보를 고르면 verifyClaim이 이어서 돈다
+    }
+    const note = clarifyData.ambiguous === true
+      ? "모호하다는 판단이 나왔지만 후보가 부족해 원래 문장으로 검증했습니다." : "";
+    btn.disabled = false;
+    await verifyClaim(claim, { clarifyData, note });
+  } catch (e) {
+    setProgress("");
+    showError("오류: " + (e && e.message ? e.message : String(e)));
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// claim을 검색하고 판정한다. opts.original: 사용자가 처음 쓴 문장(후보를 고른 경우), opts.clarifyData: 문장 정리 응답.
+async function verifyClaim(claim, opts = {}) {
+  clearError();
+  $("clarify").classList.add("hidden");
+  $("result").classList.add("hidden");
+  $("evidenceBox").classList.add("hidden");
+
+  const btn = $("checkBtn");
+  btn.disabled = true;
+  [...$("clarifyChoices").querySelectorAll("button"), $("clarifyKeep")].forEach((b) => { b.disabled = true; });
+
+  const checked = $("checkedClaim");
+  if (opts.original && opts.original !== claim) {
+    checked.textContent = `검증한 문장: ${claim}  (원래 문장: ${opts.original})`;
+    checked.classList.remove("hidden");
+  } else {
+    checked.textContent = "";
+    checked.classList.add("hidden");
+  }
+
+  try {
+    setProgress("Tavily로 근거를 찾는 중…");
+    const evidence = await searchTavily(claim);
+
+    if (evidence.length === 0) {
+      setProgress("");
+      renderVerdict({
+        verdict: HOLD,
+        summary: "검색된 근거가 없어 판단을 유보합니다.",
+        reason: "Tavily 검색 결과가 0건이라 판정에 쓸 근거가 없습니다. 판정은 Claude에게 묻지 않았습니다.",
+        meta: ["근거 0건 · 판정 호출 안 함", usageText(opts.clarifyData, "문장 정리")].filter(Boolean).join(" · "),
+      });
+      return;
+    }
+
+    renderEvidence(evidence, new Set());
+    const data = await callClaude("/api/claude", buildPrompt(claim, evidence), "판정");
+    const v = parseVerdict(data, evidence.length);
+    setProgress("");
+
+    const metaParts = [`근거 ${evidence.length}건`, `판정 모델: ${data.model || "알 수 없음"}`];
+    if (v.used.length) metaParts.push(`사용한 근거: ${v.used.map((n) => "[" + n + "]").join(" ")}`);
+    const ut = usageText(data, "판정");
+    if (ut) metaParts.push(ut);
+    const ct = usageText(opts.clarifyData, "문장 정리");
+    if (ct) metaParts.push(ct);
+    if (opts.kept) metaParts.push("모호하다는 판단이 있었지만 원래 문장 그대로 검증했습니다.");
+    if (opts.note) metaParts.push(opts.note);
+    if (v.notes.length) metaParts.push("검사: " + v.notes.join(" "));
+
+    renderVerdict({ verdict: v.verdict, summary: v.summary, reason: v.reason, meta: metaParts.join(" · ") });
+    renderEvidence(evidence, new Set(v.used));
+  } catch (e) {
+    setProgress("");
+    showError("오류: " + (e && e.message ? e.message : String(e)));
+  } finally {
+    btn.disabled = false;
+    [...$("clarifyChoices").querySelectorAll("button"), $("clarifyKeep")].forEach((b) => { b.disabled = false; });
+  }
+}
+
+$("checkBtn").addEventListener("click", runCheck);
+$("claim").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) runCheck();
+});
+
+// ───── 모델 선택칸 ─────
+// 목록은 server.py가 정한다. 마지막으로 고른 모델은 이 브라우저에만 기억한다(편의 기능, 실패해도 무시).
+const MODEL_PREF = "factcheck.model";
+async function loadModels() {
+  const sel = $("modelSelect");
+  let saved = "";
+  try { saved = localStorage.getItem(MODEL_PREF) || ""; } catch (e) {}
+  try {
+    const res = await fetch("/api/models");
+    if (!res.ok) return;
+    const info = await res.json();
+    sel.replaceChildren();
+    for (const m of info.models || []) {
+      const opt = document.createElement("option");
+      opt.value = m.id;
+      opt.textContent = m.label;
+      sel.appendChild(opt);
+    }
+    const ids = (info.models || []).map((m) => m.id);
+    sel.value = ids.includes(saved) ? saved : info.default;
+  } catch (e) { /* 서버가 꺼져 있으면 기본 선택지로 두고, 검증하기에서 오류를 보여 준다 */ }
+}
+$("modelSelect").addEventListener("change", () => {
+  try { localStorage.setItem(MODEL_PREF, $("modelSelect").value); } catch (e) {}
+});
+
+if (OPENED_AS_FILE) showError(FILE_WARNING);
+else loadModels();
+</script>
+</body>
+</html>
