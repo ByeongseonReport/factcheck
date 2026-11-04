@@ -105,6 +105,19 @@
     margin-left: 6px;
     vertical-align: middle;
   }
+  .ev-tier {
+    display: inline-block;
+    font-size: 14px;
+    font-weight: 700;
+    border-radius: 6px;
+    padding: 1px 8px;
+    margin: 4px 0 2px;
+    background: #eef1f5;
+    color: var(--muted);
+  }
+  .ev-tier.t-stats, .ev-tier.t-gov { background: #e3f1e7; color: #17663a; }
+  .ev-tier.t-research, .ev-tier.t-press { background: #e6eefb; color: #1f4fa3; }
+  .ev-tier.t-wiki, .ev-tier.t-blog { background: #fbe9e7; color: #a3321b; }
   .ev-date { color: var(--muted); font-size: 16px; }
   .ev-url { font-size: 16px; word-break: break-all; }
   .ev-url a { color: var(--accent); }
@@ -171,7 +184,74 @@
 
 // ───── 설정 ─────
 // 키는 server.py가 .env에서 읽어 붙인다. 이 화면은 키를 모른다.
-const MAX_EVIDENCE = 5;
+const MAX_NEWS = 5;      // 뉴스 검색 근거 수
+const MAX_PUBLIC = 3;    // 공공 출처 검색 근거 수
+
+// ───── 출처 등급 (2026-11-04 사용자 결정) ─────
+// 도메인으로 자동 분류한다. 가장 길게 일치하는 도메인이 이긴다(kostat.go.kr는 go.kr보다 먼저 잡힌다).
+const TIERS = {
+  stats:    { label: "통계기관",            weight: 1.0 },
+  gov:      { label: "정부·공공기관",       weight: 0.9 },
+  research: { label: "연구기관·학술",       weight: 0.8 },
+  press:    { label: "언론사",              weight: 0.75 }, // 통신사·전국 일간지·방송사·지역 언론
+  online:   { label: "인터넷 신문",         weight: 0.6 },
+  portal:   { label: "포털 뉴스",           weight: 0.6 },  // 원 언론사를 주소로 알 수 없음
+  other:    { label: "기업·단체·미분류",    weight: 0.4 },
+  wiki:     { label: "온라인 위키",         weight: 0.3 },
+  blog:     { label: "블로그·커뮤니티·SNS", weight: 0.1 },
+};
+// 판정에 쓴 근거가 전부 이 값 이하이면 판정을 판단 유보로 바꾼다(위키·블로그만으로 단정 금지).
+const WEAK_WEIGHT = 0.3;
+
+const DOMAIN_TIERS = {
+  stats: ["kostat.go.kr", "kosis.kr", "mods.go.kr", "bok.or.kr"],
+  gov: ["go.kr", "korea.kr", "gov", "mil.kr", "nhis.or.kr", "nps.or.kr", "hira.or.kr", "reb.or.kr", "lh.or.kr",
+        "kosha.or.kr", "kepco.co.kr", "airkorea.or.kr", "gov.uk", "europa.eu", "un.org", "who.int", "oecd.org", "worldbank.org", "imf.org"],
+  research: ["re.kr", "ac.kr", "kci.go.kr", "riss.kr", "dbpia.co.kr", "doi.org", "arxiv.org", "nature.com",
+             "sciencedirect.com", "springer.com", "pubmed.ncbi.nlm.nih.gov", "edu"],
+  press: [
+    // 통신사
+    "yna.co.kr", "newsis.com", "news1.kr",
+    // 전국 일간지·경제지
+    "chosun.com", "joongang.co.kr", "donga.com", "hani.co.kr", "khan.co.kr", "kmib.co.kr", "seoul.co.kr",
+    "segye.com", "hankookilbo.com", "munhwa.com", "naeil.com", "mk.co.kr", "hankyung.com", "sedaily.com",
+    "mt.co.kr", "edaily.co.kr", "fnnews.com", "heraldcorp.com", "asiae.co.kr", "ajunews.com", "etnews.com", "dt.co.kr",
+    // 방송사
+    "kbs.co.kr", "imbc.com", "sbs.co.kr", "jtbc.co.kr", "ytn.co.kr", "mbn.co.kr", "ichannela.com", "tvchosun.com",
+    "ebs.co.kr", "nocutnews.co.kr", "sentv.co.kr", "obsnews.co.kr", "wjmbc.co.kr", "chmbc.co.kr", "mbcgn.kr", "g1tv.co.kr",
+    "knn.co.kr", "tbc.co.kr", "ikbc.co.kr", "tjb.co.kr", "ubc.co.kr", "cjb.co.kr", "jtv.co.kr", "jibs.co.kr",
+    // 지역 신문
+    "kwnews.co.kr", "kado.net", "wonjutoday.co.kr", "iwjnews.com", "kyeonggi.com", "kihoilbo.co.kr", "incheonilbo.com",
+    "busan.com", "kookje.co.kr", "imaeil.com", "yeongnam.com", "idomin.com", "knnews.co.kr", "kwangju.co.kr",
+    "jnilbo.com", "joongdo.co.kr", "daejonilbo.com", "cctimes.kr", "jjan.kr", "jejunews.com", "ihalla.com",
+    "kyongbuk.co.kr", "ksilbo.co.kr",
+    // 해외 주요 언론
+    "reuters.com", "apnews.com", "bbc.com", "bbc.co.uk", "nytimes.com", "washingtonpost.com", "theguardian.com",
+    "wsj.com", "ft.com", "bloomberg.com", "cnn.com", "nhk.or.jp", "afp.com",
+  ],
+  online: ["ohmynews.com", "pressian.com", "mediatoday.co.kr", "newstapa.org", "wikitree.co.kr", "insight.co.kr",
+           "newspim.com"],
+  portal: ["news.naver.com", "n.news.naver.com", "v.daum.net", "news.daum.net", "news.nate.com", "news.zum.com", "news.google.com"],
+  wiki: ["namu.wiki", "wikipedia.org", "wikiwand.com", "librewiki.net"],
+  blog: ["blog.naver.com", "cafe.naver.com", "post.naver.com", "kin.naver.com", "tistory.com", "brunch.co.kr",
+         "velog.io", "medium.com", "blog.daum.net", "cafe.daum.net", "egloos.com", "dcinside.com", "fmkorea.com",
+         "clien.net", "theqoo.net", "ruliweb.com", "instiz.net", "ppomppu.co.kr", "mlbpark.donga.com", "bobaedream.co.kr",
+         "youtube.com", "youtu.be", "x.com", "twitter.com", "facebook.com", "instagram.com", "threads.net", "reddit.com"],
+};
+// 공공 출처 검색에서 Tavily include_domains로 쓰는 목록(끝자리 일치로 동작한다, 2026-11-04 실측).
+const PUBLIC_DOMAINS = ["go.kr", "korea.kr", "kosis.kr", "bok.or.kr", "re.kr", "nhis.or.kr", "nps.or.kr", "reb.or.kr"];
+
+const DOMAIN_INDEX = Object.entries(DOMAIN_TIERS).flatMap(([tier, list]) => list.map((d) => [d, tier]))
+  .sort((a, b) => b[0].length - a[0].length);
+
+// via: "news"(뉴스 검색에서 나온 근거) 또는 "public". 뉴스 검색에서 나온 모르는 도메인은 인터넷 신문으로 본다.
+function classifySource(url, via) {
+  let host = "";
+  try { host = new URL(String(url)).hostname.toLowerCase().replace(/^www\./, "").replace(/^m\./, ""); } catch (e) {}
+  const hit = host && DOMAIN_INDEX.find(([d]) => host === d || host.endsWith("." + d));
+  const tier = hit ? hit[1] : (host && via === "news" ? "online" : "other");
+  return { tier, ...TIERS[tier], guessed: !hit };
+}
 
 const VERDICTS = ["사실", "대체로 사실", "절반의 사실", "대체로 사실 아님", "사실 아님", "판단 유보"];
 const HOLD = "판단 유보";
@@ -227,6 +307,11 @@ function renderEvidence(items, usedSet) {
       title.appendChild(tag);
     }
     li.appendChild(title);
+
+    const src = document.createElement("div");
+    src.className = "ev-tier t-" + ev.source.tier;
+    src.textContent = `${ev.source.label} · 가중치 ${ev.source.weight.toFixed(2)}${ev.source.guessed ? " (도메인 목록에 없어 추정)" : ""}`;
+    li.appendChild(src);
 
     const date = document.createElement("div");
     date.className = "ev-date";
@@ -303,7 +388,15 @@ function formatDate(raw) {
 }
 
 // ───── 1단계: Tavily 검색 ─────
-async function searchTavily(claim) {
+// 뉴스 검색: topic news라야 published_date가 온다. days 365는 사용자 지정(지정하지 않으면 최근 기사만 나온다, 2026-11-04 실측).
+// 공공 출처 검색: topic general + include_domains. 날짜(published_date)는 오지 않는다.
+const SEARCHES = {
+  news:   { topic: "news", days: 365, max_results: MAX_NEWS },
+  public: { topic: "general", include_domains: PUBLIC_DOMAINS, max_results: MAX_PUBLIC },
+};
+
+async function searchTavily(claim, via) {
+  const opt = SEARCHES[via];
   let res;
   try {
     res = await fetch("/api/tavily", {
@@ -311,10 +404,8 @@ async function searchTavily(claim) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         query: claim,
-        topic: "news",       // 뉴스 모드라야 published_date가 온다
-        days: 365,           // 최근 1년. 지정하지 않으면 최근 기사만 나온다(2026-11-04 실측)
+        ...opt,
         search_depth: "advanced",
-        max_results: MAX_EVIDENCE,
         include_answer: false,
         include_raw_content: false,
         include_images: false,
@@ -334,18 +425,41 @@ async function searchTavily(claim) {
   let data;
   try { data = await res.json(); } catch (e) { throw new Error("Tavily 응답을 읽지 못했습니다(JSON 아님)."); }
   const results = Array.isArray(data.results) ? data.results : [];
-  return results.slice(0, MAX_EVIDENCE).map((r) => ({
-    title: typeof r.title === "string" ? r.title.trim() : "",
-    url: typeof r.url === "string" ? r.url.trim() : "",
-    date: formatDate(r.published_date),
-    content: typeof r.content === "string" ? r.content.trim() : "",
-  }));
+  return results.slice(0, opt.max_results).map((r) => {
+    const url = typeof r.url === "string" ? r.url.trim() : "";
+    return {
+      title: typeof r.title === "string" ? r.title.trim() : "",
+      url,
+      date: formatDate(r.published_date),
+      content: typeof r.content === "string" ? r.content.trim() : "",
+      source: classifySource(url, via),
+    };
+  });
+}
+
+// 두 검색을 함께 돌려 합친다. 같은 주소는 한 번만 두고, 가중치가 높은 근거부터 번호를 매긴다.
+// 한쪽 검색만 실패하면 남은 쪽으로 계속하고 notes에 적는다. 둘 다 실패하면 뉴스 쪽 오류를 낸다.
+async function gatherEvidence(claim) {
+  const [news, pub] = await Promise.allSettled([searchTavily(claim, "news"), searchTavily(claim, "public")]);
+  if (news.status === "rejected" && pub.status === "rejected") throw news.reason;
+  const notes = [];
+  if (news.status === "rejected") notes.push("뉴스 검색 실패: " + news.reason.message);
+  if (pub.status === "rejected") notes.push("공공 출처 검색 실패: " + pub.reason.message);
+  const seen = new Set();
+  const merged = [];
+  for (const ev of [...(news.value || []), ...(pub.value || [])]) {
+    if (ev.url && seen.has(ev.url)) continue;
+    seen.add(ev.url);
+    merged.push(ev);
+  }
+  merged.sort((a, b) => b.source.weight - a.source.weight); // 정렬은 안정적이라 같은 등급 안에서는 검색 순서가 유지된다
+  return { evidence: merged, notes };
 }
 
 // ───── 2단계: Claude 판정 ─────
 function buildPrompt(claim, evidence) {
   const evText = evidence.map((ev, i) =>
-    `[근거 ${i + 1}]\n제목: ${ev.title || "(없음)"}\n날짜: ${ev.date || "(없음)"}\n주소: ${ev.url || "(없음)"}\n내용: ${ev.content || "(없음)"}`
+    `[근거 ${i + 1}]\n출처 등급: ${ev.source.label} (가중치 ${ev.source.weight.toFixed(2)})\n제목: ${ev.title || "(없음)"}\n날짜: ${ev.date || "(없음)"}\n주소: ${ev.url || "(없음)"}\n내용: ${ev.content || "(없음)"}`
   ).join("\n\n");
 
   return `너는 지역 언론사의 팩트체크 담당 기자다. 아래 [주장]을 아래 [근거]만 보고 판정한다.
@@ -362,6 +476,13 @@ function buildPrompt(claim, evidence) {
 6. used_evidence에는 판정에 실제로 쓴 근거 번호만 정수로 넣는다.
 7. summary는 한국어 한 문장, reason은 한국어로 3~6문장으로 쓴다.
 
+[출처 등급] 근거마다 출처 등급과 가중치(0~1)가 붙어 있다. 도메인으로 자동 분류한 값이라 틀릴 수 있다.
+통계기관 1.0 > 정부·공공기관 0.9 > 연구기관·학술 0.8 > 언론사 0.75 > 인터넷 신문·포털 뉴스 0.6 > 기업·단체·미분류 0.4 > 온라인 위키 0.3 > 블로그·커뮤니티·SNS 0.1
+8. 근거끼리 어긋나면 가중치가 높은 근거를 우선한다. 다만 가중치가 높은 근거라도 시점이 다르거나 주장과 대상이 다르면 규칙 2에 따라 쓰지 않는다.
+9. 가중치 0.3 이하(위키·블로그 등)의 근거만으로는 판정하지 않는다. 그런 근거만 관련 있으면 "판단 유보"로 판정한다.
+10. 정부·공공기관 근거는 그 기관이 직접 한 사업을 자기 평가한 내용일 수 있다. 사업 성과나 효과에 관한 주장이라면 그 점을 reason에 밝힌다.
+11. 날짜가 "(없음)"인 근거는 언제 자료인지 내용에서 확인되지 않으면 시점이 중요한 주장에 쓰지 않는다.
+
 [주장]
 ${claim}
 
@@ -369,7 +490,7 @@ ${claim}
 ${evText}`;
 }
 
-// 판정은 server.py가 Claude API(claude-opus-5-5)로 받는다. 답 형식(JSON 스키마)도 서버가 강제한다.
+// 판정은 server.py가 Claude API(화면에서 고른 모델)로 받는다. 답 형식(JSON 스키마)도 서버가 강제한다.
 // 429·5xx·연결 오류 재시도는 서버의 Anthropic SDK가 2번까지 알아서 한다.
 // path: /api/claude(판정) 또는 /api/clarify(문장 정리). what은 진행·오류 문구에 쓰는 작업 이름.
 async function callClaude(path, prompt, what) {
@@ -448,7 +569,8 @@ function usageText(data, what) {
 }
 
 // ───── 3단계: 답 검사 ─────
-function parseVerdict(obj, evidenceCount) {
+function parseVerdict(obj, evidence) {
+  const evidenceCount = evidence.length;
   if (!obj || typeof obj !== "object") throw new Error("Claude 판정 결과가 비어 있습니다.");
   const notes = [];
   let verdict = typeof obj.verdict === "string" ? obj.verdict.trim() : "";
@@ -466,7 +588,15 @@ function parseVerdict(obj, evidenceCount) {
     verdict = HOLD;
   }
 
+  // 안전장치: 판정에 쓴 근거가 전부 위키·블로그급이면 단정하지 않는다.
+  const topWeight = used.length ? Math.max(...used.map((n) => evidence[n - 1].source.weight)) : 0;
+  if (verdict !== HOLD && topWeight <= WEAK_WEIGHT) {
+    notes.push(`모델이 "${verdict}"로 판정했지만 판정에 쓴 근거가 모두 가중치 ${WEAK_WEIGHT} 이하(위키·블로그 등)라서 판단 유보로 바꿨습니다.`);
+    verdict = HOLD;
+  }
+
   return {
+    topWeight,
     verdict,
     summary: typeof obj.summary === "string" ? obj.summary.trim() : "",
     reason: typeof obj.reason === "string" ? obj.reason.trim() : "",
@@ -529,8 +659,8 @@ async function verifyClaim(claim, opts = {}) {
   }
 
   try {
-    setProgress("Tavily로 근거를 찾는 중…");
-    const evidence = await searchTavily(claim);
+    setProgress("Tavily로 근거를 찾는 중… (뉴스 + 정부·통계·공공기관)");
+    const { evidence, notes: searchNotes } = await gatherEvidence(claim);
 
     if (evidence.length === 0) {
       setProgress("");
@@ -538,18 +668,25 @@ async function verifyClaim(claim, opts = {}) {
         verdict: HOLD,
         summary: "검색된 근거가 없어 판단을 유보합니다.",
         reason: "Tavily 검색 결과가 0건이라 판정에 쓸 근거가 없습니다. 판정은 Claude에게 묻지 않았습니다.",
-        meta: ["근거 0건 · 판정 호출 안 함", usageText(opts.clarifyData, "문장 정리")].filter(Boolean).join(" · "),
+        meta: ["근거 0건 · 판정 호출 안 함", ...searchNotes, usageText(opts.clarifyData, "문장 정리")].filter(Boolean).join(" · "),
       });
       return;
     }
 
     renderEvidence(evidence, new Set());
     const data = await callClaude("/api/claude", buildPrompt(claim, evidence), "판정");
-    const v = parseVerdict(data, evidence.length);
+    const v = parseVerdict(data, evidence);
     setProgress("");
 
-    const metaParts = [`근거 ${evidence.length}건`, `판정 모델: ${data.model || "알 수 없음"}`];
-    if (v.used.length) metaParts.push(`사용한 근거: ${v.used.map((n) => "[" + n + "]").join(" ")}`);
+    const tierCount = {};
+    evidence.forEach((ev) => { tierCount[ev.source.label] = (tierCount[ev.source.label] || 0) + 1; });
+    const metaParts = [`근거 ${evidence.length}건 (${Object.entries(tierCount).map(([l, c]) => `${l} ${c}`).join(", ")})`,
+                       `판정 모델: ${data.model || "알 수 없음"}`];
+    if (v.used.length) {
+      metaParts.push(`사용한 근거: ${v.used.map((n) => "[" + n + "]").join(" ")}`);
+      metaParts.push(`사용한 근거의 최고 가중치: ${v.topWeight.toFixed(2)}`);
+    }
+    metaParts.push(...searchNotes);
     const ut = usageText(data, "판정");
     if (ut) metaParts.push(ut);
     const ct = usageText(opts.clarifyData, "문장 정리");
