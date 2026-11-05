@@ -6,13 +6,24 @@
 실행:  「팩트체크 열기.bat」 더블클릭 (또는 python server.py)
        →  http://127.0.0.1:8765 이 자동으로 열린다. 이미 켜져 있으면 화면만 연다.
 필요한 패키지: anthropic (pip install anthropic)
+
+서버 배포(Render 등): 키와 설정은 .env 대신 환경변수로 준다. 환경변수가 .env보다 우선한다.
+  FACTCHECK_HOST=0.0.0.0     외부 접속을 받는다(이때는 비밀번호가 반드시 있어야 켜진다)
+  PORT                       호스팅 업체가 정해 주는 포트
+  FACTCHECK_PASSWORD         동료들과 나눠 쓰는 공용 비밀번호
+  FACTCHECK_DAILY_LIMIT      하루(UTC)에 받는 Claude 호출 수 상한. 0이면 무제한
+  FACTCHECK_ORIGIN           접속 주소(https://...). Render는 RENDER_EXTERNAL_URL로 자동 인식
 """
 
+import datetime
+import hmac
 import http.server
 import json
+import os
 import re
 import socket
 import sys
+import threading
 import urllib.error
 import urllib.request
 import webbrowser
@@ -20,8 +31,9 @@ from pathlib import Path
 
 import anthropic
 
-HOST = "127.0.0.1"
-PORT = 8765
+HOST = os.environ.get("FACTCHECK_HOST", "127.0.0.1")
+PORT = int(os.environ.get("PORT") or 8765)
+LOCAL_ONLY = HOST in ("127.0.0.1", "localhost", "::1")
 HERE = Path(__file__).resolve().parent
 ENV_PATH = HERE / ".env"
 INDEX_PATH = HERE / "index.html"
@@ -84,7 +96,10 @@ CLARIFY_SCHEMA = {
 }
 MAX_BODY = 512 * 1024
 TIMEOUT = 90
-ALLOWED_ORIGINS = {f"http://{HOST}:{PORT}", f"http://localhost:{PORT}"}
+ALLOWED_ORIGINS = {f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}"}
+for _o in (os.environ.get("FACTCHECK_ORIGIN"), os.environ.get("RENDER_EXTERNAL_URL")):
+    if _o:
+        ALLOWED_ORIGINS.add(_o.strip().rstrip("/"))
 
 
 def load_env(path: Path) -> dict:
@@ -107,8 +122,35 @@ def load_env(path: Path) -> dict:
 
 
 def key(name: str) -> str:
-    # 요청마다 다시 읽어서 .env를 고치면 서버를 다시 켜지 않아도 반영된다.
-    return load_env(ENV_PATH).get(name, "").strip()
+    # 환경변수(서버 배포)가 먼저다. 없으면 .env를 요청마다 다시 읽어서, .env를 고치면 서버를 다시 켜지 않아도 반영된다.
+    v = os.environ.get(name, "").strip()
+    return v or load_env(ENV_PATH).get(name, "").strip()
+
+
+def daily_limit() -> int:
+    try:
+        return max(0, int(key("FACTCHECK_DAILY_LIMIT") or 0))
+    except ValueError:
+        return 0
+
+
+# 하루 Claude 호출 수. 서버를 다시 켜면 0부터 센다(무료 호스팅은 자주 재시작되므로 넉넉한 안전장치일 뿐이다).
+_usage = {"day": "", "count": 0}
+_usage_lock = threading.Lock()
+
+
+def take_quota() -> bool:
+    limit = daily_limit()
+    if not limit:
+        return True
+    today = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+    with _usage_lock:
+        if _usage["day"] != today:
+            _usage["day"], _usage["count"] = today, 0
+        if _usage["count"] >= limit:
+            return False
+        _usage["count"] += 1
+        return True
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -157,6 +199,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if origin not in ALLOWED_ORIGINS:
             self.local_error(403, "이 화면에서 온 요청만 받습니다.")
             return
+        password = key("FACTCHECK_PASSWORD")
+        if password:
+            given = self.headers.get("X-App-Password") or ""
+            if not hmac.compare_digest(given.encode("utf-8"), password.encode("utf-8")):
+                self.send_json(401, {"error": {"message": "비밀번호가 틀렸습니다." if given else "비밀번호가 필요합니다."},
+                                     "source": "local", "need_password": True})
+                return
         if not (self.headers.get("Content-Type") or "").startswith("application/json"):
             self.local_error(415, "JSON 요청만 받습니다.")
             return
@@ -208,6 +257,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         k = key("CLAUDE_API_KEY") or key("ANTHROPIC_API_KEY")
         if not k:
             self.local_error(500, ".env에 CLAUDE_API_KEY가 없습니다.")
+            return
+        if not take_quota():
+            self.local_error(429, "오늘 쓸 수 있는 판정 횟수를 다 썼습니다. 내일(한국 시간 오전 9시 이후) 다시 시도하세요.")
             return
 
         # SDK가 429·5xx·연결 오류를 알아서 2번까지 다시 시도한다.
@@ -314,12 +366,24 @@ def already_running(url: str) -> bool:
 
 
 def main() -> None:
-    env = load_env(ENV_PATH)
-    missing = [n for n in ("TAVILY_API_KEY",) if not env.get(n)]
-    if not (env.get("CLAUDE_API_KEY") or env.get("ANTHROPIC_API_KEY")):
+    missing = [n for n in ("TAVILY_API_KEY",) if not key(n)]
+    if not (key("CLAUDE_API_KEY") or key("ANTHROPIC_API_KEY")):
         missing.append("CLAUDE_API_KEY")
     if missing:
-        print(f"경고: {ENV_PATH} 에 {', '.join(missing)} 가 없습니다. 검증하기를 누르면 오류가 납니다.")
+        print(f"경고: 환경변수나 {ENV_PATH} 에 {', '.join(missing)} 가 없습니다. 검증하기를 누르면 오류가 납니다.")
+
+    if not LOCAL_ONLY:
+        # 외부 접속을 받으면서 비밀번호가 없으면 주소를 아는 누구나 키를 쓴다. 아예 켜지 않는다.
+        if not key("FACTCHECK_PASSWORD"):
+            print("FACTCHECK_PASSWORD가 없어서 외부 접속 모드로 켤 수 없습니다.")
+            sys.exit(1)
+        print(f"외부 접속 모드: 허용 주소 {sorted(ALLOWED_ORIGINS)}, 하루 상한 {daily_limit() or '없음'}", flush=True)
+        httpd = http.server.ThreadingHTTPServer((HOST, PORT), Handler)
+        try:
+            httpd.serve_forever()
+        finally:
+            httpd.server_close()
+        return
 
     url = f"http://{HOST}:{PORT}/"
     try:

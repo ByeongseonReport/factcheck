@@ -375,7 +375,31 @@ async function readError(res) {
 }
 
 function serverDownError(e) {
-  return new Error(`팩트체크 도구가 꺼져 있습니다. 검은 창이 닫혔다면 「팩트체크 열기.bat」를 다시 더블클릭하세요. (${e.message})`);
+  return new Error(`팩트체크 서버에 연결하지 못했습니다. 내 PC에서 쓰는 중이면 「팩트체크 열기.bat」를 다시 더블클릭하세요. (${e.message})`);
+}
+
+// 서버에 비밀번호가 걸려 있으면(공유 서버) 한 번 물어보고 이 브라우저에 기억한다. 틀리면 다시 묻는다.
+const PASSWORD_PREF = "factcheck.password";
+function savedPassword() {
+  try { return localStorage.getItem(PASSWORD_PREF) || ""; } catch (e) { return ""; }
+}
+async function apiPost(path, body) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-App-Password": savedPassword() },
+      body: JSON.stringify(body),
+    });
+    if (res.status !== 401) return res;
+    let j = null;
+    try { j = await res.clone().json(); } catch (e) {}
+    if (!j || !j.need_password) return res;
+    const msg = (j.error && j.error.message) || "비밀번호가 필요합니다.";
+    const pw = window.prompt(`${msg}\n팩트체크 도구 비밀번호를 입력하세요.`, "");
+    if (pw === null) return res;
+    try { localStorage.setItem(PASSWORD_PREF, pw.trim()); } catch (e) {}
+  }
+  throw new Error("비밀번호가 맞지 않습니다. 비밀번호를 확인한 뒤 다시 시도하세요.");
 }
 
 // "Sat, 31 Oct 2026 07:00:00 GMT" → "2026-10-31". 읽지 못하면 받은 글자 그대로.
@@ -413,19 +437,15 @@ async function searchTavily(claim, via, t) {
   }
   let res;
   try {
-    res = await fetch("/api/tavily", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query: claim,
-        ...opt,
-        search_depth: "advanced",
-        include_answer: false,
-        include_raw_content: false,
-        include_images: false,
-      }),
+    res = await apiPost("/api/tavily", {
+      query: claim,
+      ...opt,
+      search_depth: "advanced",
+      include_answer: false,
+      include_raw_content: false,
+      include_images: false,
     });
-  } catch (e) { throw serverDownError(e); }
+  } catch (e) { throw e instanceof TypeError ? serverDownError(e) : e; }
 
   if (!res.ok) {
     const { msg, local } = await readError(res);
@@ -518,12 +538,8 @@ async function callClaude(path, prompt, what) {
   setProgress(`Claude에게 ${what}을(를) 묻는 중…`);
   let res;
   try {
-    res = await fetch(path, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, model: $("modelSelect").value }),
-    });
-  } catch (e) { throw serverDownError(e); }
+    res = await apiPost(path, { prompt, model: $("modelSelect").value });
+  } catch (e) { throw e instanceof TypeError ? serverDownError(e) : e; }
 
   if (!res.ok) {
     const { msg } = await readError(res);

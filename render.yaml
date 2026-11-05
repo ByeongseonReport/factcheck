@@ -1,0 +1,23 @@
+# Render Blueprint: 공유 서버 배포 설정. 키·비밀번호는 여기 적지 않고 Render 화면에서 넣는다(sync: false).
+services:
+  - type: web
+    name: factcheck
+    runtime: python
+    plan: free
+    region: singapore
+    buildCommand: pip install -r requirements.txt
+    startCommand: python server.py
+    healthCheckPath: /
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: FACTCHECK_HOST
+        value: 0.0.0.0
+      - key: FACTCHECK_DAILY_LIMIT
+        value: "200"
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: CLAUDE_API_KEY
+        sync: false
+      - key: FACTCHECK_PASSWORD
+        sync: false
