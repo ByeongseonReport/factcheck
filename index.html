@@ -197,6 +197,100 @@
 
   .hidden { display: none !important; }
 </style>
+<style>
+  /* ───── 취재 도우미(챗봇) — 판정 화면 스타일은 건드리지 않고 cb- 접두사로만 쓴다 ───── */
+  .cb-fab {
+    position: fixed; right: 24px; bottom: 24px; z-index: 50;
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 22px 12px 14px; font-size: 18px; letter-spacing: -.01em;
+    background: var(--ink); color: var(--sheet); border: 2px solid var(--ink);
+    box-shadow: 0 6px 20px rgba(0,0,0,.22);
+  }
+  .cb-fab:hover { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .cb-fab[aria-expanded="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .cb-fab svg { width: 40px; height: 40px; flex: 0 0 auto; }
+  .cb-fab .cb-fab-text { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.2; }
+  .cb-fab .cb-fab-sub { font-size: 12px; font-weight: 600; opacity: .75; }
+
+  .cb-panel {
+    position: fixed; right: 24px; bottom: 104px; z-index: 49;
+    width: 480px; height: min(720px, calc(100vh - 140px));
+    min-width: 340px; min-height: 420px;
+    display: flex; flex-direction: column;
+    background: var(--sheet); color: var(--ink); border: 1px solid var(--rule-strong);
+    box-shadow: 0 16px 48px rgba(0,0,0,.25); font-size: 16px; line-height: 1.6;
+  }
+  .cb-resize {
+    position: absolute; left: -1px; top: -1px; width: 22px; height: 22px; cursor: nwse-resize; z-index: 2;
+    background: linear-gradient(135deg, var(--accent) 0 3px, transparent 3px 7px, var(--accent) 7px 9px, transparent 9px);
+    touch-action: none;
+  }
+  .cb-head {
+    display: flex; align-items: center; gap: 8px; padding: 12px 14px 10px 28px;
+    border-bottom: 3px double var(--rule-strong);
+  }
+  .cb-head h2 { font-size: 19px; flex: 1 1 auto; }
+  .cb-head h2 span { color: var(--accent); }
+  .cb-head button { font-size: 13px; padding: 6px 10px; }
+  .cb-close { font-size: 20px !important; padding: 2px 10px !important; line-height: 1; }
+
+  .cb-log { flex: 1 1 auto; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px; background: var(--paper); }
+  .cb-msg { max-width: 92%; white-space: pre-wrap; word-break: break-word; }
+  .cb-user { align-self: flex-end; background: var(--ink); color: var(--sheet); padding: 8px 12px; }
+  .cb-bot { align-self: flex-start; background: var(--sheet); border: 1px solid var(--rule); padding: 10px 12px; }
+  .cb-error { align-self: stretch; max-width: none; color: var(--accent); font-weight: 700; border-left: 4px solid var(--accent); background: var(--sheet); padding: 8px 12px; }
+  .cb-small { font-size: 13px; color: var(--muted); }
+  .cb-scope { display: inline-block; font-size: 12px; font-weight: 700; background: var(--chip); color: var(--ink-2); padding: 1px 8px; margin-top: 6px; }
+
+  .cb-steps { align-self: flex-start; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: 14px; color: var(--muted); }
+  .cb-steps span { padding: 2px 8px; border: 1px solid var(--rule); background: var(--sheet); }
+  .cb-steps span.on { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); font-weight: 700; animation: pulse 1s ease-in-out infinite alternate; }
+  .cb-steps span.done { color: var(--ink); }
+  .cb-steps i { font-style: normal; }
+  @media (prefers-reduced-motion: reduce) { .cb-steps span.on { animation: none; } }
+
+  .cb-card { align-self: stretch; max-width: none; white-space: normal; background: var(--sheet); border: 1px solid var(--rule); border-top: 3px solid var(--v, var(--rule-strong)); padding: 12px 14px; }
+  .cb-claim { font-size: 14px; color: var(--ink-2); margin: 0 0 8px; }
+  .cb-claim b { color: var(--ink); }
+  .cb-inherit { display: inline-block; font-size: 12px; font-weight: 700; color: var(--link); border: 1px solid var(--link); padding: 0 6px; margin-bottom: 6px; }
+  .cb-badge { display: inline-block; font-family: var(--serif); font-weight: 800; font-size: 20px; color: #fff; background: var(--v); padding: 2px 12px; margin: 2px 0 8px; }
+  .cb-summary { font-family: var(--serif); font-weight: 600; font-size: 17px; margin: 0 0 8px; }
+  .cb-reason { white-space: pre-wrap; color: var(--ink-2); margin: 0 0 10px; font-size: 15px; }
+  .cb-sec { font-size: 12px; font-weight: 800; letter-spacing: .08em; color: var(--accent); margin: 10px 0 4px; }
+  .cb-ev { list-style: none; margin: 0; padding: 0; }
+  .cb-ev li { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 0 6px; border-top: 1px solid var(--rule); padding: 6px 0; font-size: 14px; }
+  .cb-ev li:first-child { border-top: none; }
+  .cb-ev .n { font-family: var(--serif); font-weight: 800; color: var(--muted); }
+  .cb-ev li.used .n { color: var(--accent); }
+  .cb-ev .t { font-weight: 700; line-height: 1.4; }
+  .cb-ev .l { color: var(--muted); font-size: 12px; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
+  .cb-ev .u { word-break: break-all; font-size: 12px; }
+  .cb-next { margin: 0; padding-left: 18px; font-size: 14px; }
+  .cb-meta { font-size: 12px; color: var(--muted); border-top: 1px dashed var(--rule); margin-top: 10px; padding-top: 6px; }
+  .cb-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .cb-actions button { font-size: 13px; padding: 6px 12px; }
+  .cb-choices { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+  .cb-choices button { text-align: left; font-size: 14px; font-weight: 600; line-height: 1.45; padding: 8px 10px; background: var(--paper); color: var(--ink); border: 1px solid var(--ink); }
+  .cb-choices button:hover { background: var(--chip); }
+  .cb-choices button.picked { border-color: var(--accent); }
+  .cb-choices button.picked::after { content: " · 확인함"; color: var(--accent); font-weight: 800; }
+
+  .cb-compose { border-top: 1px solid var(--rule); padding: 10px 12px 8px; background: var(--sheet); }
+  .cb-compose-row { display: flex; gap: 8px; align-items: flex-end; }
+  .cb-compose textarea { min-height: 48px; max-height: 180px; font-size: 16px; padding: 9px 11px; resize: none; }
+  .cb-compose button { padding: 11px 16px; background: var(--accent); border-color: var(--accent); color: var(--accent-ink); flex: 0 0 auto; }
+  .cb-compose .cb-small { margin: 4px 0 0; }
+
+  @media (max-width: 600px) {
+    .cb-fab { right: 16px; bottom: 16px; padding: 10px 16px 10px 10px; font-size: 16px; }
+    .cb-fab svg { width: 32px; height: 32px; }
+    .cb-panel { left: 16px; right: 16px; bottom: 88px; width: auto !important; height: calc(100vh - 120px) !important; min-width: 0; }
+    .cb-resize { display: none; }
+    .cb-head { padding-left: 12px; gap: 6px; }
+    .cb-head h2 { font-size: 17px; white-space: nowrap; }
+    .cb-head button { font-size: 12px; padding: 5px 7px; white-space: nowrap; }
+  }
+</style>
 </head>
 <body>
 <header class="masthead">
@@ -1126,6 +1220,675 @@ $("today").textContent = new Date().toLocaleDateString("ko-KR", { year: "numeric
 renderHistory();
 if (OPENED_AS_FILE) showError(FILE_WARNING);
 else loadModels();
+</script>
+
+<!-- ───── 취재 도우미(챗봇) ───── -->
+<button id="cbFab" class="cb-fab" type="button" aria-expanded="false" aria-controls="cbPanel">
+  <svg viewBox="0 0 48 48" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="24" y1="4" x2="24" y2="10"/><circle cx="24" cy="4" r="2" fill="currentColor"/>
+    <rect x="8" y="10" width="32" height="26" rx="6"/>
+    <circle cx="17.5" cy="22" r="3.2" fill="currentColor"/><circle cx="30.5" cy="22" r="3.2" fill="currentColor"/>
+    <path d="M17 30h14"/><path d="M4 20v8M44 20v8"/><path d="M16 36v6M32 36v6"/>
+  </svg>
+  <span class="cb-fab-text"><span>취재 도우미</span><span class="cb-fab-sub" id="cbFabSub">팩트체크 대화</span></span>
+</button>
+
+<section id="cbPanel" class="cb-panel hidden" role="dialog" aria-labelledby="cbTitle">
+  <div id="cbResize" class="cb-resize" title="끌어서 크기 바꾸기"></div>
+  <div class="cb-head">
+    <h2 id="cbTitle">취재 도우미<span>.</span></h2>
+    <button id="cbNew" type="button" class="secondary">새 대화</button>
+    <button id="cbDownload" type="button" class="secondary">대화 내려받기</button>
+    <button id="cbClose" type="button" class="secondary cb-close" aria-label="대화창 닫기">×</button>
+  </div>
+  <div id="cbLog" class="cb-log" aria-live="polite"></div>
+  <div class="cb-compose">
+    <div class="cb-compose-row">
+      <label for="cbInput" class="hidden">메시지</label>
+      <textarea id="cbInput" rows="2" placeholder="확인할 주장이나 질문, 기사 문단을 넣으세요"></textarea>
+      <button id="cbSend" type="button">보내기</button>
+    </div>
+    <p class="cb-small">Enter 보내기 · Shift+Enter 줄바꿈 · 판정 모델은 판정 화면 선택칸을 따릅니다.</p>
+  </div>
+</section>
+
+<script>
+"use strict";
+// 판정 화면 스크립트의 함수(gatherEvidence·buildPrompt·parseVerdict·normalizeTime·gapText·classifySource·
+// apiPost·readError·addHistory 등)를 그대로 불러 쓴다. 판정 화면의 화면 요소는 건드리지 않는다.
+
+const CB_KEY = "factcheck.chat.v1";
+const CB_SIZE_KEY = "factcheck.chat.size";
+const CB_MAX_MSGS = 200;
+const CB_STORED_CONTENT = 1500;   // 근거 본문 저장 길이(근거 질문에 답할 때 쓴다)
+const CB_MAX_INPUT = 8000;
+const CB_STEPS = ["주장 살펴보기", "자료 찾기", "판정"];
+
+// 범위를 말했을 때 쓰는 검색 대상. 지역 언론은 판정 화면의 출처 등급 목록(DOMAIN_TIERS.press)에서 지역별로 골랐다.
+const CB_STATS_DOMAINS = ["kostat.go.kr", "kosis.kr", "mods.go.kr", "bok.or.kr"];
+const CB_REGION_PRESS = [
+  { keys: ["강원", "원주", "춘천", "강릉", "영동", "영서"], label: "강원", domains: ["kwnews.co.kr", "kado.net", "wonjutoday.co.kr", "iwjnews.com", "wjmbc.co.kr", "chmbc.co.kr", "mbcgn.kr", "g1tv.co.kr"] },
+  { keys: ["대구", "경북", "포항", "구미", "안동"], label: "대구·경북", domains: ["imaeil.com", "yeongnam.com", "kyongbuk.co.kr", "tbc.co.kr"] },
+  { keys: ["부산", "울산", "경남", "창원", "부울경"], label: "부산·울산·경남", domains: ["busan.com", "kookje.co.kr", "knn.co.kr", "idomin.com", "knnews.co.kr", "ksilbo.co.kr", "ubc.co.kr"] },
+  { keys: ["광주", "전남", "호남"], label: "광주·전남", domains: ["kwangju.co.kr", "jnilbo.com", "ikbc.co.kr"] },
+  { keys: ["전북", "전주"], label: "전북", domains: ["jjan.kr", "jtv.co.kr"] },
+  { keys: ["대전", "충청", "충남", "충북", "청주", "세종"], label: "대전·충청", domains: ["joongdo.co.kr", "daejonilbo.com", "cctimes.kr", "tjb.co.kr", "cjb.co.kr"] },
+  { keys: ["경기", "인천", "수도권"], label: "경기·인천", domains: ["kyeonggi.com", "kihoilbo.co.kr", "incheonilbo.com", "obsnews.co.kr"] },
+  { keys: ["제주"], label: "제주", domains: ["jejunews.com", "ihalla.com", "jibs.co.kr"] },
+];
+
+const CB_HOWTO = `이 도구가 실제로 하는 순서는 이렇습니다.
+
+1. 주장 살펴보기: 보낸 말을 Claude가 읽고, 확인할 주장 한 문장과 주장 시점(예: 2025년, 현재)을 뽑습니다. 앞 대화를 이어받으면 바뀐 부분만 바꿉니다.
+2. 자료 찾기: Tavily 검색으로 뉴스 5건(최근 1년, 과거 주장이면 그 시점 앞뒤 1년)과 정부·통계·공공기관 사이트 3건을 찾습니다. 범위를 말하면 그 범위로만 찾습니다.
+3. 출처 등급: 근거 주소의 도메인으로 통계기관(1.0)부터 블로그·커뮤니티(0.1)까지 등급과 가중치를 붙이고, 가중치가 높은 근거부터 번호를 매깁니다.
+4. 판정: 판정 화면과 같은 지시문으로 Claude가 찾은 근거만 보고 6단계(사실 ~ 사실 아님, 판단 유보) 중 하나를 고릅니다.
+5. 검사: 6단계 밖의 답, 근거 번호가 없는 판정, 위키·블로그급 근거만 쓴 판정은 판단 유보로 바꿉니다.
+
+하지 않는 일: 전화·대면 취재, 근거 페이지 전체나 원문 PDF 읽기(검색 결과에 나온 발췌만 봅니다), 검색 결과 밖의 지식으로 판정하기.
+판정 화면과 다른 점: 판정 화면은 모호한 문장이면 후보 문장을 먼저 보여 주지만, 대화창은 1단계에서 앞 대화를 보고 주장 문장을 바로 정합니다.`;
+
+const CB_WELCOME = `안녕하세요. 취재 중에 확인할 주장을 보내 주세요.
+
+· 「원주시 인구가 올해 36만 명을 넘었어?」처럼 물으면 근거를 찾아 판정합니다.
+· 「그럼 작년은?」「춘천은?」처럼 이어서 물을 수 있습니다.
+· 「왜 이 판정이야?」「반박 근거만」처럼 방금 판정을 물으면 찾은 근거 안에서 답합니다.
+· 기사나 보도자료 문단을 붙여 넣으면 확인할 문장을 골라 드립니다.
+· 「정부 자료로만」「최근 한 달 기사로」처럼 검색 범위를 정할 수 있습니다.`;
+
+let cbMsgs = [];
+let cbBusy = false;
+
+// ───── 저장 ─────
+function cbLoad() {
+  try {
+    const arr = JSON.parse(localStorage.getItem(CB_KEY) || "[]");
+    return Array.isArray(arr) ? arr.filter((m) => m && typeof m.role === "string") : [];
+  } catch (e) { return []; }
+}
+function cbSave() {
+  const list = cbMsgs.slice(-CB_MAX_MSGS).map((m) => m.kind === "result"
+    ? { ...m, evidence: (m.evidence || []).map((ev) => ({ ...ev, content: (ev.content || "").slice(0, CB_STORED_CONTENT) })) }
+    : m);
+  for (let n = list.length; n > 0; n = Math.floor(n / 2)) {
+    try { localStorage.setItem(CB_KEY, JSON.stringify(list.slice(-n))); return; } catch (e) {}
+  }
+}
+function cbPush(m) {
+  m.id = m.id || Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  m.at = m.at || new Date().toISOString();
+  cbMsgs.push(m);
+  cbSave();
+  cbAppend(m);
+  return m;
+}
+
+// ───── 그리기 ─────
+function cbEl(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined && text !== null) e.textContent = text;
+  return e;
+}
+function cbScroll() { const log = $("cbLog"); log.scrollTop = log.scrollHeight; }
+
+function cbAppend(m) {
+  const node = cbRender(m);
+  if (node) { $("cbLog").appendChild(node); cbScroll(); }
+}
+function cbRenderAll() {
+  const log = $("cbLog");
+  log.replaceChildren();
+  if (!cbMsgs.length) log.appendChild(cbEl("div", "cb-msg cb-bot", CB_WELCOME));
+  cbMsgs.forEach((m) => { const n = cbRender(m); if (n) log.appendChild(n); });
+  cbScroll();
+}
+
+function cbRender(m) {
+  if (m.role === "user") return cbEl("div", "cb-msg cb-user", m.text);
+  if (m.kind === "error") return cbEl("div", "cb-msg cb-error", m.text);
+  if (m.kind === "result") return cbRenderResult(m);
+  if (m.kind === "choices") return cbRenderChoices(m);
+  const box = cbEl("div", "cb-msg cb-bot", m.text);
+  if (m.about) box.prepend(cbEl("div", "cb-small", `「${m.about}」 판정의 근거 안에서 답합니다 (새로 검색하지 않음)`));
+  if (m.scopeLabel) box.appendChild(cbEl("div", "cb-scope", "검색 범위: " + m.scopeLabel));
+  return box;
+}
+
+function cbEvidenceList(evidence, used) {
+  const ol = cbEl("ol", "cb-ev");
+  evidence.forEach((ev, i) => {
+    const li = cbEl("li", used.has(i + 1) ? "used" : "");
+    li.appendChild(cbEl("div", "n", String(i + 1)));
+    const body = cbEl("div");
+    body.appendChild(cbEl("div", "t", ev.title || "(제목 없음)"));
+    const line = cbEl("div", "l");
+    if (used.has(i + 1)) line.appendChild(cbEl("span", "ev-used", "판정에 사용"));
+    line.appendChild(cbEl("span", "ev-tier t-" + (ev.source && ev.source.tier), ev.source ? ev.source.label : "미분류"));
+    line.appendChild(cbEl("span", "", (ev.date || "날짜 정보 없음") + (ev.gapText && ev.date ? ` · ${ev.gapText}` : "")));
+    body.appendChild(line);
+    const href = safeHttpUrl(ev.url);
+    const u = cbEl("div", "u");
+    if (href) {
+      const a = cbEl("a", "", href);
+      a.href = href; a.target = "_blank"; a.rel = "noopener noreferrer";
+      u.appendChild(a);
+    } else u.textContent = ev.url ? ev.url + " (열 수 없는 주소)" : "주소 없음";
+    body.appendChild(u);
+    li.appendChild(body);
+    ol.appendChild(li);
+  });
+  return ol;
+}
+
+function cbRenderResult(m) {
+  const card = cbEl("div", "cb-msg cb-card " + (VERDICT_CLASS[m.verdict] || "v-hold"));
+  if (m.inherited) card.appendChild(cbEl("div", "cb-inherit", "앞 주장 이어받음" + (m.changed ? ` · ${m.changed}` : "")));
+  const claim = cbEl("p", "cb-claim");
+  claim.append("확인한 주장: ", cbEl("b", "", m.claim));
+  card.appendChild(claim);
+  card.appendChild(cbEl("div", "cb-badge", m.verdict));
+  if (m.summary) card.appendChild(cbEl("p", "cb-summary", m.summary));
+  if (m.reason) card.appendChild(cbEl("p", "cb-reason", m.reason));
+  if (m.next && m.next.length) {
+    card.appendChild(cbEl("div", "cb-sec", "다음에 확인할 곳"));
+    const ul = cbEl("ul", "cb-next");
+    m.next.forEach((x) => ul.appendChild(cbEl("li", "", x.material ? `${x.place} — ${x.material}` : x.place)));
+    card.appendChild(ul);
+  }
+  if (m.evidence && m.evidence.length) {
+    card.appendChild(cbEl("div", "cb-sec", `근거 ${m.evidence.length}건`));
+    card.appendChild(cbEvidenceList(m.evidence, new Set(m.used || [])));
+  }
+  card.appendChild(cbEl("div", "cb-scope", "검색 범위: " + (m.scopeLabel || "판정 화면과 같음")));
+  if (m.meta) card.appendChild(cbEl("div", "cb-meta", m.meta));
+
+  const actions = cbEl("div", "cb-actions");
+  const copy = cbEl("button", "secondary", "기사용 문안 복사");
+  copy.type = "button";
+  copy.addEventListener("click", async () => {
+    const ok = await cbCopy(cbArticleText(m));
+    copy.textContent = ok ? "복사했습니다" : "복사하지 못했습니다";
+    setTimeout(() => { copy.textContent = "기사용 문안 복사"; }, 1800);
+  });
+  actions.appendChild(copy);
+  if (typeof addHistory === "function") {
+    const save = cbEl("button", "secondary", m.savedAt ? "기록에 저장됨" : "기록에 저장");
+    save.type = "button";
+    save.disabled = !!m.savedAt;
+    save.addEventListener("click", () => {
+      addHistory({ verdict: m.verdict, summary: m.summary, reason: m.reason,
+                   meta: ["취재 도우미에서 확인", "검색 범위: " + (m.scopeLabel || "판정 화면과 같음"), m.meta].filter(Boolean).join(" · "),
+                   claim: m.claim, original: m.original || "", model: m.model || "", evidence: m.evidence || [], used: m.used || [] });
+      m.savedAt = new Date().toISOString();
+      cbSave();
+      save.textContent = "기록에 저장됨";
+      save.disabled = true;
+    });
+    actions.appendChild(save);
+  }
+  card.appendChild(actions);
+  return card;
+}
+
+function cbRenderChoices(m) {
+  const box = cbEl("div", "cb-msg cb-bot");
+  box.appendChild(cbEl("div", "", m.text));
+  const list = cbEl("div", "cb-choices");
+  const picked = new Set(m.picked || []);
+  m.sentences.forEach((s, i) => {
+    const b = cbEl("button", picked.has(i) ? "picked" : "", s.text);
+    b.type = "button";
+    b.addEventListener("click", () => {
+      if (cbBusy) return;
+      m.picked = [...new Set([...(m.picked || []), i])];
+      cbSave();
+      b.className = "picked";
+      cbRunCheck({ claim: s.text, time: s.time, scope: m.scope, original: "", inherited: false, changed: "" }, s.text);
+    });
+    list.appendChild(b);
+  });
+  box.appendChild(list);
+  if (m.scopeLabel) box.appendChild(cbEl("div", "cb-scope", "검색 범위: " + m.scopeLabel));
+  return box;
+}
+
+// 진행 단계 표시(저장하지 않는다)
+function cbShowSteps(active) {
+  let el = $("cbSteps");
+  if (!el) { el = cbEl("div", "cb-steps"); el.id = "cbSteps"; $("cbLog").appendChild(el); }
+  el.replaceChildren();
+  CB_STEPS.forEach((s, i) => {
+    if (i) el.appendChild(cbEl("i", "", "→"));
+    el.appendChild(cbEl("span", i < active ? "done" : i === active ? "on" : "", s));
+  });
+  $("cbLog").appendChild(el); // 항상 맨 아래
+  cbScroll();
+}
+function cbHideSteps() { const el = $("cbSteps"); if (el) el.remove(); }
+
+// ───── 복사·내려받기 ─────
+function cbArticleText(m) {
+  const used = new Set(m.used || []);
+  const ev = m.evidence || [];
+  const pick = ev.map((e, i) => ({ e, n: i + 1 })).filter((x) => used.size === 0 || used.has(x.n));
+  return [
+    `주장: ${m.claim}`,
+    `판정: ${m.verdict}${m.summary ? ` — ${m.summary}` : ""}`,
+    `근거${used.size ? "(판정에 사용)" : ""}:`,
+    ...(pick.length ? pick.map((x) => `[${x.n}] ${x.e.title || "(제목 없음)"} (${x.e.source ? x.e.source.label : ""}${x.e.date ? ", " + x.e.date : ""}) ${x.e.url || ""}`) : ["(근거 없음)"]),
+    `검색 범위: ${m.scopeLabel || "판정 화면과 같음"}`,
+    `확인 시각: ${formatStamp(m.at)}`,
+  ].join("\n");
+}
+async function cbCopy(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch (e) {}
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
+    return ok;
+  } catch (e) { return false; }
+}
+function cbDownload() {
+  const lines = [`# 취재 도우미 대화 (${formatStamp(new Date().toISOString())} 내려받음)`, ""];
+  for (const m of cbMsgs) {
+    const when = formatStamp(m.at);
+    if (m.role === "user") lines.push(`## 나 · ${when}`, "", m.text, "");
+    else if (m.kind === "result") lines.push(`## 판정 · ${when}`, "", ...(m.inherited ? [`(앞 주장 이어받음${m.changed ? ": " + m.changed : ""})`, ""] : []),
+      cbArticleText(m), "", "이유: " + (m.reason || ""), ...(m.next && m.next.length ? ["", "다음에 확인할 곳: " + m.next.map((x) => `${x.place}${x.material ? " — " + x.material : ""}`).join(" / ")] : []), "");
+    else if (m.kind === "choices") lines.push(`## 도우미 · ${when}`, "", m.text, ...m.sentences.map((s, i) => `${i + 1}. ${s.text}`), "");
+    else lines.push(`## 도우미${m.kind === "error" ? " (오류)" : ""} · ${when}`, "", m.text, ...(m.scopeLabel ? ["", "검색 범위: " + m.scopeLabel] : []), "");
+  }
+  const url = URL.createObjectURL(new Blob(["﻿" + lines.join("\n")], { type: "text/markdown;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = `취재도우미_${todayStr()}.md`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// ───── 민감 정보 ─────
+function cbSensitive(text) {
+  const found = [];
+  if (/\d{6}\s*-\s*[1-8]\d{6}/.test(text)) found.push("주민등록번호로 보이는 숫자");
+  if (/(01[016789]|0[2-6]\d?)[-.\s]?\d{3,4}[-.\s]?\d{4}/.test(text)) found.push("전화번호로 보이는 숫자");
+  if (/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/.test(text)) found.push("이메일 주소");
+  if (/엠바고|embargo/i.test(text)) found.push("「엠바고」");
+  return found;
+}
+
+// ───── 서버 호출 ─────
+// 판정 화면의 callClaude는 판정 화면 진행 문구를 바꾸므로, 같은 방식(apiPost·같은 모델 선택)으로 따로 부른다.
+async function cbClaude(path, prompt, what) {
+  let res;
+  try { res = await apiPost(path, { prompt, model: $("modelSelect").value }); }
+  catch (e) { throw e instanceof TypeError ? serverDownError(e) : e; }
+  if (!res.ok) {
+    const { msg } = await readError(res);
+    throw new Error(`Claude ${what} 실패 (HTTP ${res.status}): ${msg}${cbKeyHint(res.status, msg)}`);
+  }
+  try { return await res.json(); }
+  catch (e) { throw new Error(`Claude ${what} 결과를 읽지 못했습니다(JSON 아님).`); }
+}
+function cbKeyHint(status, msg) {
+  if (/API_KEY가 없습니다|KEY가 틀렸거나/.test(msg || ""))
+    return "\n키는 이 화면이 아니라 서버에 저장합니다. 내 PC에서 쓰면 이 폴더의 .env 파일에, 공유 서버면 Render의 Environment에 키를 넣어야 합니다(관리자에게 알려 주세요).";
+  if (status === 401) return "\n판정 화면과 같은 비밀번호를 쓰므로, 다시 보내면 비밀번호를 한 번 더 묻습니다.";
+  return "";
+}
+
+// 범위가 있을 때의 검색. 판정 화면의 searchTavily와 같은 요청을 보내고 include_domains·기간만 바꾼다.
+async function cbSearch(query, via, opt) {
+  let res;
+  try {
+    res = await apiPost("/api/tavily", { query, ...opt, search_depth: "advanced", include_answer: false, include_raw_content: false, include_images: false });
+  } catch (e) { throw e instanceof TypeError ? serverDownError(e) : e; }
+  if (!res.ok) {
+    const { msg, local } = await readError(res);
+    throw new HttpError("Tavily", res.status, msg, local);
+  }
+  let data;
+  try { data = await res.json(); } catch (e) { throw new Error("Tavily 응답을 읽지 못했습니다(JSON 아님)."); }
+  return (Array.isArray(data.results) ? data.results : []).slice(0, opt.max_results).map((r) => {
+    const url = typeof r.url === "string" ? r.url.trim() : "";
+    return { title: typeof r.title === "string" ? r.title.trim() : "", url, date: formatDate(r.published_date),
+             content: typeof r.content === "string" ? r.content.trim() : "", source: classifySource(url, via) };
+  });
+}
+
+// scope를 실제 검색 계획으로 바꾼다. 결과: { plan: [{via, opt}], label, note }
+function cbScopePlan(scope, t) {
+  const s = scope && typeof scope === "object" ? scope : {};
+  const days = Number.isInteger(s.days) && s.days > 0 ? Math.min(s.days, 3650) : 0;
+  const sources = ["public", "stats", "press", "regional"].includes(s.sources) ? s.sources : "all";
+  if (sources === "all" && !days) return null; // 판정 화면과 똑같이 gatherEvidence를 쓴다
+  const iso = (ms) => new Date(ms).toISOString().slice(0, 10);
+  const range = days ? { start_date: iso(parseDay(todayStr()) - days * DAY), end_date: todayStr() } : null;
+  const newsWin = range || newsWindow(t);
+  const parts = [];
+  let plan, note = "";
+  if (sources === "public") { plan = [{ via: "public", opt: { topic: "general", include_domains: PUBLIC_DOMAINS, max_results: 6, ...(range || {}) } }]; parts.push("정부·통계·공공기관 사이트만"); }
+  else if (sources === "stats") { plan = [{ via: "public", opt: { topic: "general", include_domains: CB_STATS_DOMAINS, max_results: 6, ...(range || {}) } }]; parts.push("통계기관 사이트만"); }
+  else if (sources === "press") { plan = [{ via: "news", opt: { topic: "news", include_domains: DOMAIN_TIERS.press, max_results: 8, ...newsWin } }]; parts.push("언론사 목록의 매체만"); }
+  else if (sources === "regional") {
+    const region = String(s.region || "");
+    const hit = CB_REGION_PRESS.find((r) => r.keys.some((k) => region.includes(k)));
+    if (hit) { plan = [{ via: "news", opt: { topic: "news", include_domains: hit.domains, max_results: 8, ...newsWin } }]; parts.push(`${hit.label} 지역 언론(${hit.domains.join(", ")})만`); }
+    else { plan = [{ via: "news", opt: { topic: "news", include_domains: DOMAIN_TIERS.press, max_results: 8, ...newsWin } }]; parts.push("언론사 목록의 매체만");
+           note = `「${region || "지역"}」 지역 언론 목록이 없어 언론사 전체 목록으로 찾았습니다.`; }
+  } else {
+    plan = [{ via: "news", opt: { ...SEARCHES.news, days: undefined, ...range } }, { via: "public", opt: { ...SEARCHES.public, ...range } }];
+    parts.push("뉴스 + 정부·통계·공공기관");
+  }
+  plan.forEach((p) => { if (p.opt.days === undefined) delete p.opt.days; });
+  if (days) parts.push(`최근 ${days}일`);
+  else if (newsWin.start_date && sources !== "public" && sources !== "stats") parts.push(`${newsWin.start_date} ~ ${newsWin.end_date}`);
+  return { plan, label: (s.label ? s.label + " → " : "") + parts.join(" · "), note };
+}
+
+async function cbGather(claim, t, scope) {
+  const sp = cbScopePlan(scope, t);
+  if (!sp) {
+    const { evidence, notes } = await gatherEvidence(claim, t);
+    const win = newsWindow(t);
+    return { evidence, notes, label: `판정 화면과 같음(뉴스 ${win.days ? "최근 1년" : `${win.start_date} ~ ${win.end_date}`} + 정부·통계·공공기관)` };
+  }
+  const settled = await Promise.allSettled(sp.plan.map((p) => cbSearch(claim, p.via, p.opt)));
+  if (settled.every((r) => r.status === "rejected")) throw settled[0].reason;
+  const notes = settled.filter((r) => r.status === "rejected").map((r) => "검색 일부 실패: " + r.reason.message);
+  if (sp.note) notes.unshift(sp.note);
+  const seen = new Set(), merged = [];
+  for (const r of settled) for (const ev of r.value || []) {
+    if (ev.url && seen.has(ev.url)) continue;
+    seen.add(ev.url); merged.push(ev);
+  }
+  merged.sort((a, b) => b.source.weight - a.source.weight);
+  return { evidence: merged, notes, label: sp.label };
+}
+
+// ───── 프롬프트 ─────
+function cbWeekday() { return ["일", "월", "화", "수", "목", "금", "토"][new Date().getDay()]; }
+
+function cbContext() {
+  return cbMsgs.slice(0, -1).slice(-14).map((m) => { // 마지막 항목은 방금 보낸 [새 메시지]라 뺀다
+    if (m.role === "user") return `기자: ${m.text.slice(0, 600)}`;
+    if (m.kind === "result") return `도우미(판정): 주장 「${m.claim}」 → ${m.verdict}. ${m.summary || ""} [주장 시점: ${m.timeLabel || "현재"}] [검색 범위: ${m.scopeRaw ? JSON.stringify(m.scopeRaw) : "지정 없음"}]`;
+    if (m.kind === "choices") return `도우미(문장 뽑기): ${m.sentences.map((s, i) => `${i + 1}) ${s.text}`).join(" ")}`;
+    if (m.kind === "error") return "도우미(오류): " + m.text.slice(0, 200);
+    return "도우미: " + m.text.slice(0, 300);
+  }).join("\n") || "(이전 대화 없음)";
+}
+function cbLastResult() {
+  for (let i = cbMsgs.length - 1; i >= 0; i--) if (cbMsgs[i].kind === "result") return cbMsgs[i];
+  return null;
+}
+
+function cbRoutePrompt(text) {
+  const last = cbLastResult();
+  return `너는 지역 언론사 기자의 취재를 돕는 팩트체크 도우미다. 기자가 방금 보낸 [새 메시지]를 읽고 무엇을 할지 정한다. 직접 판정하지 않는다.
+오늘은 ${todayStr()}(${cbWeekday()}요일, 한국 시간)이다.
+
+[intent 고르기]
+- chat: 인사, 고마움, 잡담, 도구와 상관없는 말. reply에 한두 문장으로 짧게 답하고, 할 수 있는 일(주장 확인, 이어서 묻기, 방금 판정 묻기, 기사 문단에서 문장 고르기, 검색 범위 정하기) 중 맞는 것을 한 줄로 안내한다. 판정하지 않는다.
+- check: 어떤 주장이 사실인지 확인해 달라는 말. 앞 주장을 바꿔 묻는 말(「그럼 작년은?」「대구는?」)도 여기다.
+- ask_last: 방금 나온 판정에 대해 묻는 말(「왜 이 판정이야?」「반박 근거만」「어디에 더 확인해?」「3번 근거는 뭐야?」). 새로 검색하지 않는다. 직전 판정이 없으면 chat으로 보고 reply에 먼저 주장을 보내 달라고 쓴다.
+- extract: 기사·보도자료처럼 여러 문장으로 된 문단을 붙여 넣은 경우. 확인할 만한 사실 주장 문장을 최대 5개 뽑아 sentences에 넣는다.
+- howto: 이 도구가 어떻게 확인하는지, 어떤 순서로 일하는지 묻는 말. reply는 빈 문자열로 둔다(화면이 정해진 설명을 보여 준다).
+
+[check일 때 claim 만들기]
+- 기자의 말에 있는 조건(누가, 어디서, 언제, 어떻게, 숫자, 단위, 비교 대상)을 하나도 빼지 않는다. 기자가 말하지 않은 조건이나 수치를 새로 넣지 않는다.
+- 「~이다」로 끝나는 한 문장으로 쓴다(예: 「원주시 인구는 올해(2026년) 36만 명 이상이다.」). 「~이다」로 바꾸면 뜻이 달라질 때만 「~했다」 같은 평서문으로 끝낸다. 질문형(「~야?」「~맞아?」)으로 쓰지 않는다.
+- 「어제」「올해」「작년」「지난달」「지난주」처럼 상대적인 날짜 말은 그대로 두고 바로 뒤 괄호에 오늘 기준 실제 날짜를 붙인다(예: 「어제(2026-11-04)」「작년(2025년)」).
+- 앞 주장을 바꿔 묻는 말이면 직전에 확인한 주장에서 기자가 바꾼 부분만 바꾸고 나머지 조건은 그대로 둔다. 이때 inherited를 true로, changed에 「시점: 2026년 → 2025년」「지역: 원주시 → 대구시」처럼 바뀐 부분을 쓴다. 새 주장이면 inherited는 false, changed는 빈 문자열.
+- 확인할 대상이 전혀 없어 문장을 만들 수 없으면(「그거 맞아?」인데 앞 대화도 없음) chat으로 보고 reply에 무엇을 확인할지 물어본다.
+
+[time] check의 claim이 말하는 시점. 「2026년」이면 start 2026-01-01, end 2026-12-31. 시점이 없거나 「현재」「요즘」이면 start·end를 빈 문자열로, label을 「현재」로 둔다. 추측으로 기간을 좁히지 않는다. check가 아니면 label·start·end를 빈 문자열로 둔다.
+
+[scope 검색 범위] 기자가 이번 메시지에서 검색 범위를 직접 말했을 때만 정한다.
+- 「정부 자료로만」「공공기관 자료로」→ sources public. 「통계로만」「통계청 자료로」→ stats. 「언론 기사로만」→ press. 「대구·경북 언론으로」「강원 지역 언론으로」→ regional, region에 지역 이름.
+- 「최근 한 달」→ days 30, 「최근 일주일」→ 7, 「최근 3개월」→ 90. 기간을 말하지 않으면 days 0.
+- label에 기자가 말한 범위를 짧게 적는다(예: 「정부 자료로만, 최근 한 달」).
+- 범위를 말하지 않았으면 sources all, days 0, region·label 빈 문자열. 주장에 지역 이름이 들어 있어도 범위를 좁히지 않는다.
+- 앞 주장을 이어받는 check에서 기자가 범위를 새로 말하지 않았으면, 직전 판정의 검색 범위를 그대로 이어받는다.
+
+[extract일 때] sentences의 각 text는 위 claim 규칙을 따르는 독립된 한 문장이다. 수치·날짜·기관·사람이 들어간 확인 가능한 사실 주장을 고르고, 의견·전망·인용된 다짐은 고르지 않는다. 각 time도 채운다. reply에 「확인할 만한 문장 n개를 골랐습니다」처럼 한 문장을 쓴다. extract가 아니면 sentences는 빈 배열.
+
+[직전 판정]
+${last ? `주장: ${last.claim}\n판정: ${last.verdict}\n주장 시점: ${last.timeLabel || "현재"}\n검색 범위: ${last.scopeRaw ? JSON.stringify(last.scopeRaw) : "지정 없음"}` : "(없음)"}
+
+[이전 대화]
+${cbContext()}
+
+[새 메시지]
+${text}`;
+}
+
+function cbEvidenceText(evidence) {
+  return evidence.map((ev, i) =>
+    `[근거 ${i + 1}]\n출처 등급: ${ev.source ? ev.source.label : "미분류"}\n제목: ${ev.title || "(없음)"}\n날짜: ${ev.date || "(없음)"}\n주소: ${ev.url || "(없음)"}\n내용: ${ev.content || "(없음)"}`).join("\n\n");
+}
+
+function cbAnswerPrompt(last, question) {
+  return `너는 지역 언론사 기자의 취재를 돕는 팩트체크 도우미다. 기자가 방금 나온 판정에 대해 물었다. 새로 검색하지 않는다. 아래 [판정]과 [근거] 안의 내용만 써서 답한다.
+
+[규칙]
+1. 근거에 없는 사실, 너의 사전 지식, 추측을 쓰지 않는다. 근거로 답할 수 없는 질문이면 그렇다고 말하고, 새로 확인하려면 주장을 다시 보내 달라고 안내한다.
+2. 답의 문장마다 바탕이 된 근거 번호를 [1], [2]처럼 붙인다. used_evidence에는 답에 쓴 근거 번호만 넣는다.
+3. 「반박 근거만」처럼 일부를 고르라고 하면 그 조건에 맞는 근거만 고른다. 맞는 근거가 없으면 없다고 말한다.
+4. 「어디에 더 확인해?」처럼 다음 확인처를 물으면 next_checks에 1~2곳을 넣는다. place는 기관과 부서(예: 「통계청 KOSIS」「행정안전부 주민등록 인구통계」), material은 자료 이름(예: 「2026년 10월 주민등록인구 통계」)이다. 부서 이름이 확실하지 않으면 기관 이름까지만 쓰고 부서를 지어내지 않는다. 전화번호와 담당자 이름은 절대 쓰지 않는다. 묻지 않았으면 next_checks는 빈 배열.
+5. answer는 한국어로 2~6문장. 존댓말로 쓴다.
+
+[판정]
+주장: ${last.claim}
+판정: ${last.verdict}
+요약: ${last.summary || ""}
+이유: ${last.reason || ""}
+판정에 쓴 근거: ${(last.used || []).map((n) => `[${n}]`).join(" ") || "없음"}
+
+[근거]
+${cbEvidenceText(last.evidence || []) || "(근거 없음)"}
+
+[질문]
+${question}`;
+}
+
+function cbNextPrompt(claim, verdict, evidence) {
+  return `너는 지역 언론사 기자의 취재를 돕는 팩트체크 도우미다. 아래 [주장]은 검색한 근거만으로는 판정하지 못해 「${verdict}」가 나왔다.
+기자가 다음에 직접 확인할 곳을 1~2곳 골라 next_checks에 넣는다.
+- place는 그 사실을 공식적으로 갖고 있을 기관과 부서(예: 「통계청 KOSIS」「행정안전부 주민등록 인구통계」), material은 찾아볼 자료 이름이다.
+- 전화번호, 담당자 이름, 주소, 근거에 없는 수치는 절대 쓰지 않는다. 부서 이름이 확실하지 않으면 기관 이름까지만 쓴다.
+- answer에는 왜 그곳을 보면 되는지 한 문장으로 쓴다. used_evidence는 빈 배열로 둔다.
+
+[주장]
+${claim}
+
+[검색된 근거 제목]
+${evidence.map((ev, i) => `[${i + 1}] ${ev.title || "(없음)"} (${ev.source ? ev.source.label : ""})`).join("\n") || "(없음)"}`;
+}
+
+function cbCleanNext(list) {
+  const bad = /\d{2,4}[-.)\s]\d{3,4}[-.\s]\d{4}|@/;
+  return (Array.isArray(list) ? list : [])
+    .filter((x) => x && typeof x.place === "string" && x.place.trim())
+    .map((x) => ({ place: x.place.trim(), material: typeof x.material === "string" ? x.material.trim() : "" }))
+    .filter((x) => !bad.test(x.place + " " + x.material))
+    .slice(0, 2);
+}
+
+// ───── 흐름 ─────
+async function cbSend() {
+  if (cbBusy) return;
+  const input = $("cbInput");
+  let text = input.value.trim();
+  if (!text) return;
+  if (OPENED_AS_FILE) { cbPush({ role: "bot", kind: "error", text: FILE_WARNING }); return; }
+  const found = cbSensitive(text);
+  if (found.length && !window.confirm(`보내려는 글에 ${found.join(", ")}이(가) 있습니다.\n이 글은 검색(Tavily)과 판정(Claude) 서비스로 보내집니다. 그래도 보낼까요?`)) return;
+  let cut = "";
+  if (text.length > CB_MAX_INPUT) { text = text.slice(0, CB_MAX_INPUT); cut = `글이 길어 앞 ${CB_MAX_INPUT.toLocaleString()}자만 보냈습니다.`; }
+  input.value = "";
+  cbPush({ role: "user", text });
+  if (cut) cbPush({ role: "bot", kind: "text", text: cut });
+
+  cbSetBusy(true);
+  try {
+    cbShowSteps(0);
+    const r = await cbClaude("/api/chat-route", cbRoutePrompt(text), "질문 살펴보기");
+    const intent = r.intent;
+    if (intent === "check" && typeof r.claim === "string" && r.claim.trim()) {
+      await cbRunCheck({ claim: r.claim.trim(), time: r.time, scope: r.scope, inherited: !!r.inherited, changed: r.changed || "", routeUsage: r }, null, true);
+      return;
+    }
+    cbHideSteps();
+    if (intent === "howto") { cbPush({ role: "bot", kind: "text", text: CB_HOWTO }); return; }
+    if (intent === "ask_last") {
+      const last = cbLastResult();
+      if (!last) { cbPush({ role: "bot", kind: "text", text: "아직 이 대화에서 판정한 주장이 없습니다. 먼저 확인할 주장을 보내 주세요." }); return; }
+      cbShowSteps(2);
+      const a = await cbClaude("/api/chat-answer", cbAnswerPrompt(last, text), "근거 답변");
+      cbHideSteps();
+      const n = (last.evidence || []).length;
+      const used = [...new Set((a.used_evidence || []).map(Number).filter((x) => Number.isInteger(x) && x >= 1 && x <= n))];
+      const next = cbCleanNext(a.next_checks);
+      let body = (a.answer || "").trim() || "근거 안에서 답을 만들지 못했습니다.";
+      if (next.length) body += "\n\n다음에 확인할 곳\n" + next.map((x) => `· ${x.place}${x.material ? " — " + x.material : ""}`).join("\n");
+      if (used.length) body += `\n\n참고한 근거: ${used.map((x) => `[${x}]`).join(" ")}`;
+      cbPush({ role: "bot", kind: "text", text: body, about: last.claim });
+      return;
+    }
+    if (intent === "extract") {
+      const sentences = (Array.isArray(r.sentences) ? r.sentences : [])
+        .filter((s) => s && typeof s.text === "string" && s.text.trim()).map((s) => ({ text: s.text.trim(), time: s.time })).slice(0, 5);
+      if (!sentences.length) { cbPush({ role: "bot", kind: "text", text: (r.reply || "") + "\n확인할 만한 사실 문장을 찾지 못했습니다. 확인할 문장을 직접 보내 주세요." }); return; }
+      const sp = cbScopePlan(r.scope, normalizeTime(null));
+      cbPush({ role: "bot", kind: "choices", text: (r.reply || `확인할 만한 문장 ${sentences.length}개를 골랐습니다.`) + "\n누른 문장만 검색해서 판정합니다.",
+               sentences, scope: r.scope, scopeLabel: sp ? sp.label : "", picked: [] });
+      return;
+    }
+    cbPush({ role: "bot", kind: "text", text: (r.reply || "").trim() || "확인할 주장을 보내 주세요." });
+  } catch (e) {
+    cbHideSteps();
+    cbPush({ role: "bot", kind: "error", text: "오류: " + (e && e.message ? e.message : String(e)) });
+  } finally {
+    cbSetBusy(false);
+  }
+}
+
+// 주장 하나를 판정 화면과 같은 방식으로 검색·판정한다. job: claim·time·scope·inherited·changed.
+async function cbRunCheck(job, echo, already) {
+  if (!already) {
+    if (cbBusy) return;
+    if (echo) cbPush({ role: "user", text: "이 문장 확인: " + echo });
+    cbSetBusy(true);
+  }
+  try {
+    const t = normalizeTime(job.time);
+    cbShowSteps(1);
+    const { evidence, notes, label } = await cbGather(job.claim, t, job.scope);
+    if (t.note) notes.unshift(t.note);
+    evidence.forEach((ev) => { ev.gapText = gapText(timeGap(ev.date, t), t); });
+
+    let v, data = null;
+    cbShowSteps(2);
+    if (evidence.length === 0) {
+      v = { verdict: HOLD, summary: "검색된 근거가 없어 판단을 유보합니다.", reason: "검색 결과가 0건이라 판정에 쓸 근거가 없습니다. 판정은 Claude에게 묻지 않았습니다.", used: [], notes: [], topWeight: 0 };
+    } else {
+      data = await cbClaude("/api/claude", buildPrompt(job.claim, evidence, t), "판정");
+      v = parseVerdict(data, evidence);
+    }
+    let next = [], nextData = null;
+    if (v.verdict === HOLD) {
+      try {
+        nextData = await cbClaude("/api/chat-answer", cbNextPrompt(job.claim, v.verdict, evidence), "다음 확인처");
+        next = cbCleanNext(nextData.next_checks);
+      } catch (e) { notes.push("다음 확인처를 받지 못했습니다: " + e.message); }
+    }
+    cbHideSteps();
+
+    const meta = [`주장 시점: ${t.present ? "현재" : t.label}`, `판정 모델: ${(data && data.model) || (evidence.length ? "알 수 없음" : "부르지 않음")}`,
+                  ...notes, ...(v.notes.length ? ["검사: " + v.notes.join(" ")] : []),
+                  usageText(job.routeUsage, "질문 살펴보기"), usageText(data, "판정"), usageText(nextData, "다음 확인처")].filter(Boolean).join(" · ");
+    cbPush({ role: "bot", kind: "result", claim: job.claim, inherited: job.inherited, changed: job.changed,
+             verdict: v.verdict, summary: v.summary, reason: v.reason, used: v.used, evidence,
+             next, scopeLabel: label, scopeRaw: job.scope && job.scope.sources && (job.scope.sources !== "all" || job.scope.days) ? job.scope : null,
+             timeLabel: t.present ? "현재" : t.label, model: (data && data.model) || "", meta });
+  } catch (e) {
+    cbHideSteps();
+    cbPush({ role: "bot", kind: "error", text: "오류: " + (e && e.message ? e.message : String(e)) });
+  } finally {
+    if (!already) cbSetBusy(false);
+  }
+}
+
+function cbSetBusy(b) {
+  cbBusy = b;
+  $("cbSend").disabled = b;
+  $("cbFabSub").textContent = b ? "확인하는 중…" : "팩트체크 대화";
+  document.querySelectorAll(".cb-choices button").forEach((x) => { x.disabled = b; });
+}
+
+// ───── 열고 닫기·크기 ─────
+function cbToggle(open) {
+  const panel = $("cbPanel");
+  const show = open === undefined ? panel.classList.contains("hidden") : open;
+  panel.classList.toggle("hidden", !show);
+  $("cbFab").setAttribute("aria-expanded", String(show));
+  if (show) { cbScroll(); $("cbInput").focus(); }
+}
+function cbApplySize() {
+  try {
+    const s = JSON.parse(localStorage.getItem(CB_SIZE_KEY) || "null");
+    if (s && s.w && s.h) {
+      $("cbPanel").style.width = Math.min(s.w, innerWidth - 32) + "px";
+      $("cbPanel").style.height = Math.min(s.h, innerHeight - 120) + "px";
+    }
+  } catch (e) {}
+}
+(function cbResizer() {
+  const handle = $("cbResize"), panel = $("cbPanel");
+  let start = null;
+  handle.addEventListener("pointerdown", (e) => {
+    start = { x: e.clientX, y: e.clientY, w: panel.offsetWidth, h: panel.offsetHeight };
+    handle.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  handle.addEventListener("pointermove", (e) => {
+    if (!start) return;
+    const w = Math.max(340, Math.min(innerWidth - 32, start.w + (start.x - e.clientX)));
+    const h = Math.max(420, Math.min(innerHeight - 120, start.h + (start.y - e.clientY)));
+    panel.style.width = w + "px";
+    panel.style.height = h + "px";
+  });
+  const end = () => {
+    if (!start) return;
+    start = null;
+    try { localStorage.setItem(CB_SIZE_KEY, JSON.stringify({ w: panel.offsetWidth, h: panel.offsetHeight })); } catch (e) {}
+  };
+  handle.addEventListener("pointerup", end);
+  handle.addEventListener("pointercancel", end);
+})();
+
+$("cbFab").addEventListener("click", () => cbToggle());
+$("cbClose").addEventListener("click", () => cbToggle(false));
+$("cbSend").addEventListener("click", cbSend);
+$("cbInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); cbSend(); }
+});
+$("cbNew").addEventListener("click", () => {
+  if (cbBusy) return;
+  if (cbMsgs.length && !window.confirm("지금 대화를 지우고 새로 시작할까요? 필요하면 먼저 「대화 내려받기」로 받아 두세요.")) return;
+  cbMsgs = [];
+  cbSave();
+  cbRenderAll();
+});
+$("cbDownload").addEventListener("click", () => { if (cbMsgs.length) cbDownload(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("cbPanel").classList.contains("hidden")) cbToggle(false); });
+
+cbMsgs = cbLoad();
+cbApplySize();
+cbRenderAll();
 </script>
 </body>
 </html>

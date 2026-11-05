@@ -94,6 +94,63 @@ CLARIFY_SCHEMA = {
     "required": ["ambiguous", "reason", "time", "candidates"],
     "additionalProperties": False,
 }
+# ───── 취재 도우미(챗봇) ─────
+# 사용자의 말을 갈래로 나눈다: chat(인사·잡담) / check(주장 확인, 앞 주장 이어받기 포함) /
+# ask_last(방금 판정에 대한 질문) / extract(기사·보도자료 문단에서 확인할 문장 뽑기) / howto(도구 설명).
+# 실제 검색·판정은 화면이 판정 화면과 같은 함수(/api/tavily, /api/claude)로 한다.
+CHAT_SCOPE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "sources": {"type": "string", "enum": ["all", "public", "stats", "press", "regional"]},
+        "days": {"type": "integer"},
+        "region": {"type": "string"},
+        "label": {"type": "string"},
+    },
+    "required": ["sources", "days", "region", "label"],
+    "additionalProperties": False,
+}
+CHAT_ROUTE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "intent": {"type": "string", "enum": ["chat", "check", "ask_last", "extract", "howto"]},
+        "reply": {"type": "string"},
+        "claim": {"type": "string"},
+        "time": TIME_SCHEMA,
+        "inherited": {"type": "boolean"},
+        "changed": {"type": "string"},
+        "scope": CHAT_SCOPE_SCHEMA,
+        "sentences": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"text": {"type": "string"}, "time": TIME_SCHEMA},
+                "required": ["text", "time"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["intent", "reply", "claim", "time", "inherited", "changed", "scope", "sentences"],
+    "additionalProperties": False,
+}
+# 이미 찾은 근거 안에서만 답한다. next_checks는 판단 유보일 때 다음에 확인할 곳(기관·부서, 자료 이름).
+CHAT_ANSWER_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "answer": {"type": "string"},
+        "used_evidence": {"type": "array", "items": {"type": "integer"}},
+        "next_checks": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"place": {"type": "string"}, "material": {"type": "string"}},
+                "required": ["place", "material"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["answer", "used_evidence", "next_checks"],
+    "additionalProperties": False,
+}
 MAX_BODY = 512 * 1024
 TIMEOUT = 90
 ALLOWED_ORIGINS = {f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}"}
@@ -239,6 +296,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
         if path == "/api/clarify":
             self.ask_claude(payload, CLARIFY_SCHEMA, "문장 정리")
+            return
+        if path == "/api/chat-route":
+            self.ask_claude(payload, CHAT_ROUTE_SCHEMA, "질문 살펴보기")
+            return
+        if path == "/api/chat-answer":
+            self.ask_claude(payload, CHAT_ANSWER_SCHEMA, "근거 답변")
             return
 
         self.local_error(404, "없는 주소입니다.")
